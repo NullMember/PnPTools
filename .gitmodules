@@ -1,0 +1,15 @@
+[submodule "PnPLayout"]
+	path = PnPLayout
+	url = https://github.com/NullMember/PnPLayout
+[submodule "PnPBooklet"]
+	path = PnPBooklet
+	url = https://github.com/NullMember/PnPBooklet
+[submodule "PnPCardCrop"]
+	path = PnPCardCrop
+	url = https://github.com/NullMember/PnPCardCrop
+[submodule "PnPBleed"]
+	path = PnPBleed
+	url = https://github.com/NullMember/PnPBleed
+[submodule "PnPAlign"]
+	path = PnPAlign
+	url = https://github.com/NullMember/PnPAlign
