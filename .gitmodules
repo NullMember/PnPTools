@@ -14,5 +14,5 @@
 	path = PnPAlign
 	url = https://github.com/NullMember/PnPAlign
 [submodule "PnPVecImage"]
-	path = PnPVecImage
+	path = PnPCut
 	url = https://github.com/NullMember/PnPVecImage
