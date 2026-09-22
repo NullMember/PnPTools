@@ -13,6 +13,6 @@
 [submodule "PnPAlign"]
 	path = PnPAlign
 	url = https://github.com/NullMember/PnPAlign
-[submodule "PnPVecImage"]
+[submodule "PnPCut"]
 	path = PnPCut
-	url = https://github.com/NullMember/PnPVecImage
+	url = https://github.com/NullMember/PnPCut
