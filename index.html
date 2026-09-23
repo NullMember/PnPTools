@@ -5,44 +5,127 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PnPTools</title>
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="shared/pnp-shared.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="shared/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#1a1d27">
+<script src="shared/pnp-theme.js"></script>
 <style>
     .content {
-        grid-template-columns: 1fr;
-        padding: 40px;
+        display: block;
+        padding: 32px 40px 16px;
+        max-width: 1200px;
+        margin: 0 auto;
+        width: 100%;
+    }
+
+    .hub-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+    }
+
+    .guide {
+        margin-bottom: 32px;
+        padding: 18px 22px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+    }
+
+    .guide h2 {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-dim);
+        margin-bottom: 10px;
+    }
+
+    .guide ul {
+        list-style: none;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 8px 24px;
+        font-size: 0.9rem;
+        line-height: 1.45;
+    }
+
+    .guide a {
+        color: var(--accent);
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    .guide a:hover {
+        text-decoration: underline;
+    }
+
+    .step {
+        margin-bottom: 32px;
+    }
+
+    .step-title {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 14px;
+        font-size: 1rem;
+    }
+
+    .step-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 700;
+        flex: none;
+    }
+
+    .step-title span.hint {
+        font-size: 0.82rem;
+        font-weight: 400;
+        color: var(--text-dim);
     }
 
     .tool-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-        gap: 24px;
+        gap: 20px;
     }
 
     .tool-card {
         display: flex;
         flex-direction: column;
         gap: 12px;
-        padding: 24px;
+        padding: 22px;
         background: var(--surface2);
         border: 1px solid var(--border);
         border-radius: var(--radius);
         text-decoration: none;
         color: inherit;
-        transition: all 0.2s;
+        transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
     }
 
-    .tool-card:hover {
+    .tool-card:hover,
+    .tool-card:focus-visible {
         border-color: var(--accent);
-        transform: translateY(-4px);
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+        transform: translateY(-3px);
+        box-shadow: 0 12px 30px var(--shadow);
     }
 
     .tool-card .tool-icon {
-        font-size: 36px;
+        font-size: 32px;
         line-height: 1;
     }
 
-    .tool-card h2 {
-        font-size: 18px;
+    .tool-card h3 {
+        font-size: 17px;
         color: var(--text);
     }
 
@@ -69,67 +152,128 @@
     }
 
     footer a {
-        color: var(--accent-hover);
+        color: var(--accent);
         text-decoration: underline;
+    }
+
+    @media (max-width: 640px) {
+        .content {
+            padding: 20px 16px 8px;
+        }
+
+        .guide ul {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>PnPTools</h1>
-            <p class="subtitle">A small toolbox for print-and-play card and booklet prep — everything runs client-side in your browser, nothing is uploaded anywhere.</p>
+            <div class="hub-header">
+                <div>
+                    <h1>PnPTools</h1>
+                    <p class="subtitle">A toolbox for print-and-play prep. Everything runs in your browser; nothing is uploaded. Tools pass their results to each other and keep working offline after your first visit.</p>
+                </div>
+                <div id="themeSlot"></div>
+            </div>
         </header>
 
-        <div class="content">
-            <div class="tool-grid">
-                <a class="tool-card" href="PnPAlign/index.html">
-                    <div class="tool-icon">🎯</div>
-                    <h2>PnPAlign</h2>
-                    <p>Batch color, rotation, scale and position alignment for scanned or photographed cards, with crop/fill stabilization.</p>
-                    <span class="tool-cta">Open tool →</span>
-                </a>
+        <main class="content">
+            <section class="guide" aria-labelledby="guideTitle">
+                <h2 id="guideTitle">Which tool do I need?</h2>
+                <ul>
+                    <li>Cards are inside a <strong>PDF of sheets</strong> → <a href="PnPCardCrop/index.html">CardCrop</a></li>
+                    <li><strong>Scanned or photographed</strong> cards look uneven → <a href="PnPAlign/index.html">Align</a></li>
+                    <li>Card images <strong>have no bleed</strong> → <a href="PnPBleed/index.html">Bleed</a></li>
+                    <li><strong>Coins, tokens, tiles</strong> of mixed shapes → <a href="PnPLayout/index.html">Layout</a></li>
+                    <li>Print a <strong>rulebook or card sheets</strong> → <a href="PnPBooklet/index.html">Booklet</a></li>
+                    <li>You use a <strong>Cricut or cutting machine</strong> → <a href="PnPCut/index.html">Cut</a></li>
+                    <li>The deck needs a <strong>box</strong> → <a href="PnPTuckBox/index.html">TuckBox</a></li>
+                </ul>
+            </section>
 
-                <a class="tool-card" href="PnPBleed/index.html">
-                    <div class="tool-icon">🩸</div>
-                    <h2>PnPBleed</h2>
-                    <p>Generate printer bleed for card images by extending the edges, with optional corner and side trimming.</p>
-                    <span class="tool-cta">Open tool →</span>
-                </a>
+            <section class="step" aria-labelledby="step1">
+                <h2 class="step-title" id="step1"><span class="step-num">1</span> Get the images <span class="hint">from a PnP file</span></h2>
+                <div class="tool-grid">
+                    <a class="tool-card" href="PnPCardCrop/index.html">
+                        <div class="tool-icon" aria-hidden="true">✂️</div>
+                        <h3>CardCrop</h3>
+                        <p>Crop individual cards out of a printable PDF sheet, with front/back matching for duplex and fold layouts, grid offsets and ZIP export.</p>
+                        <span class="tool-cta">Open tool →</span>
+                    </a>
+                </div>
+            </section>
 
-                <a class="tool-card" href="PnPBooklet/index.html">
-                    <div class="tool-icon">📖</div>
-                    <h2>PnPBooklet</h2>
-                    <p>Arrange images or PDF pages into a tiled grid across sheets, with borders, spacing and page numbering, exported as a PDF.</p>
-                    <span class="tool-cta">Open tool →</span>
-                </a>
+            <section class="step" aria-labelledby="step2">
+                <h2 class="step-title" id="step2"><span class="step-num">2</span> Clean them up <span class="hint">optional</span></h2>
+                <div class="tool-grid">
+                    <a class="tool-card" href="PnPAlign/index.html">
+                        <div class="tool-icon" aria-hidden="true">🎯</div>
+                        <h3>Align</h3>
+                        <p>Batch colour, rotation, scale and position alignment for scanned or photographed cards, with crop/fill stabilization.</p>
+                        <span class="tool-cta">Open tool →</span>
+                    </a>
+                    <a class="tool-card" href="PnPBleed/index.html">
+                        <div class="tool-icon" aria-hidden="true">🩸</div>
+                        <h3>Bleed</h3>
+                        <p>Add printer bleed to card images by extending, mirroring or filling their edges, with white-border detection and edge trimming.</p>
+                        <span class="tool-cta">Open tool →</span>
+                    </a>
+                </div>
+            </section>
 
-                <a class="tool-card" href="PnPCardCrop/index.html">
-                    <div class="tool-icon">✂️</div>
-                    <h2>PnPCardCrop</h2>
-                    <p>Crop individual cards out of a printable PDF sheet, with front/back separation and ZIP export.</p>
-                    <span class="tool-cta">Open tool →</span>
-                </a>
+            <section class="step" aria-labelledby="step3">
+                <h2 class="step-title" id="step3"><span class="step-num">3</span> Lay out for printing</h2>
+                <div class="tool-grid">
+                    <a class="tool-card" href="PnPLayout/index.html">
+                        <div class="tool-icon" aria-hidden="true">🗂️</div>
+                        <h3>Layout</h3>
+                        <p>Pack mixed-shape pieces — coins, tokens, hex tiles — tightly onto as few sheets as possible using their transparent outlines, with outline bleed, cut lines, backs and an SVG cut file.</p>
+                        <span class="tool-cta">Open tool →</span>
+                    </a>
+                    <a class="tool-card" href="PnPBooklet/index.html">
+                        <div class="tool-icon" aria-hidden="true">📖</div>
+                        <h3>Booklet</h3>
+                        <p>Tile images and PDF pages into a grid across sheets, or impose them as a saddle-stitch booklet, with borders, spacing and page numbers.</p>
+                        <span class="tool-cta">Open tool →</span>
+                    </a>
+                </div>
+            </section>
 
-                <a class="tool-card" href="PnPLayout/index.html">
-                    <div class="tool-icon">🗂️</div>
-                    <h2>PnPLayout</h2>
-                    <p>Tile front and back card images onto printable sheets with crosshairs and borders, exported as a PDF.</p>
-                    <span class="tool-cta">Open tool →</span>
-                </a>
-
-                <a class="tool-card" href="PnPCut/index.html">
-                    <div class="tool-icon">✒️</div>
-                    <h2>PnPCut</h2>
-                    <p>Generate a PnP cutting grid, draw cut/score/emboss line art on a card, and assemble per-card designs into a full sheet — all as precise SVGs.</p>
-                    <span class="tool-cta">Open tool →</span>
-                </a>
-            </div>
-        </div>
+            <section class="step" aria-labelledby="step4">
+                <h2 class="step-title" id="step4"><span class="step-num">4</span> Cut <span class="hint">for cutting machines</span></h2>
+                <div class="tool-grid">
+                    <a class="tool-card" href="PnPCut/index.html">
+                        <div class="tool-icon" aria-hidden="true">✒️</div>
+                        <h3>Cut</h3>
+                        <p>Generate a print-then-cut grid, draw cut/score/emboss line art on a card, assemble per-card designs into a full sheet, and calibrate cut registration.</p>
+                        <span class="tool-cta">Open tool →</span>
+                    </a>
+                </div>
+            </section>
+            <section class="step" aria-labelledby="step5">
+                <h2 class="step-title" id="step5"><span class="step-num">5</span> Box it</h2>
+                <div class="tool-grid">
+                    <a class="tool-card" href="PnPTuckBox/index.html">
+                        <div class="tool-icon" aria-hidden="true">📦</div>
+                        <h3>TuckBox</h3>
+                        <p>Printable tuck boxes, two-piece lid-and-base boxes and sleeves sized to your deck, with artwork on each panel, cut and fold lines, and an SVG cut file.</p>
+                        <span class="tool-cta">Open tool →</span>
+                    </a>
+                </div>
+            </section>
+        </main>
     </div>
 
     <footer>
         <a href="https://github.com/NullMember" target="_blank" rel="noopener">NullMember</a> — print &amp; play tools
     </footer>
+
+    <script src="shared/pnp-shared.js"></script>
+    <script>
+        PnP.theme.toggleButton(document.getElementById('themeSlot'));
+        PnP.enableOffline();
+    </script>
 </body>
 </html>
