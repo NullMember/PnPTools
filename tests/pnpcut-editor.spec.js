@@ -258,6 +258,23 @@ test.describe('project files', () => {
     await expect(page.locator('.import-file .import-count')).toHaveText('3');
   });
 
+  test('Open in sheet assembler sends every card and places them', async ({ page, context }) => {
+    await page.fill('#cardName', 'Hero');
+    await page.click('#addTemplateBtn');
+    await page.click('#addCardBtn');
+    await page.click('#addCardBtn');
+    const [sheet] = await Promise.all([context.waitForEvent('page'), page.click('#openSheetBtn')]);
+    const errors = [];
+    sheet.on('pageerror', (e) => errors.push(e.message));
+    await expect(sheet).toHaveURL(/PnPCut\/sheet\.html$/); // the ?import id is consumed
+    await expect(sheet.locator('.project-cards')).toHaveText(['3 cards']);
+    const assigned = await sheet.locator('.cell-row select').evaluateAll((s) => s.map((x) => x.value).filter(Boolean));
+    expect(assigned).toHaveLength(3);
+    await expect(sheet.locator('.cell-row select').first().locator('option:checked')).toHaveText('Hero');
+    await expect(sheet.getByText('Imported 1 file from Card editor.')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
   test('opens a version 1 (single card) project', async ({ page }) => {
     await page.setInputFiles('#loadProjectInput', jsonFile('old-card.json', {
       cardW: 70, cardH: 120, imageDataUrl: null, nextId: 2,
