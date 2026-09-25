@@ -1,0 +1,13 @@
+{
+  "name": "pnptools",
+  "private": true,
+  "description": "Browser tests for PnPTools. The tools themselves have no build step or dependencies.",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "serve": "node tests/serve.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}
