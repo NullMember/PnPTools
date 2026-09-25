@@ -38,3 +38,18 @@ for (const path of PAGES.filter((p) => p !== 'index.html')) {
     await expect(subtitle).toHaveAttribute('title', await subtitle.textContent());
   });
 }
+
+// Help tooltips: every "?" has text and can be reached with the keyboard.
+for (const path of PAGES) {
+  test(`${path} help tooltips have text`, async ({ page }) => {
+    await page.goto(path);
+    const tips = await page.locator('.help').evaluateAll((els) => els.map((el) => ({
+      tip: (el.dataset.tip || '').trim(),
+      tabindex: el.getAttribute('tabindex'),
+    })));
+    for (const t of tips) {
+      expect(t.tip.length).toBeGreaterThan(20);
+      expect(t.tabindex).toBe('0');
+    }
+  });
+}
