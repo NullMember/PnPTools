@@ -58,6 +58,18 @@ async function dropFiles(page, selector, files) {
   }, { selector, files });
 }
 
+// A cut-file SVG must state its size in inches that match its mm viewBox:
+// Cricut Design Space reads the width/height numbers as inches.
+function expectSvgSizeInInches(svgText, wMm, hMm) {
+  const m = /<svg[^>]*\swidth="([\d.]+)in"[^>]*\sheight="([\d.]+)in"[^>]*\sviewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svgText);
+  base.expect(m, 'svg width/height in inches with a mm viewBox').not.toBeNull();
+  const [, wIn, hIn, vbW, vbH] = m.map(Number);
+  base.expect(wIn * 25.4).toBeCloseTo(vbW, 2);
+  base.expect(hIn * 25.4).toBeCloseTo(vbH, 2);
+  if (wMm != null) base.expect(vbW).toBeCloseTo(wMm, 2);
+  if (hMm != null) base.expect(vbH).toBeCloseTo(hMm, 2);
+}
+
 const jsonFile = (name, data) => ({ name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data)) });
 
-module.exports = { test, expect: base.expect, download, makeCardImages, dropFiles, jsonFile };
+module.exports = { test, expect: base.expect, download, makeCardImages, dropFiles, jsonFile, expectSvgSizeInInches };

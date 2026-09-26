@@ -1,5 +1,5 @@
 // PnPCut sheet assembler (PnPCut/sheet.html).
-const { test, expect, download, jsonFile } = require('./helpers');
+const { test, expect, download, jsonFile, expectSvgSizeInInches } = require('./helpers');
 
 // Three cards: one with its own die-cut outline, one with only a fold line,
 // one blank. Plus a version 1 (single card) project.
@@ -110,6 +110,7 @@ test.describe('pages', () => {
     await page.click('#placeAllBtn');
     const single = await download(page, () => page.click('#exportAllBtn'));
     expect(single.name).toBe('sheet_63x88mm_2x3_all.svg');
+    expectSvgSizeInInches(single.text(), 210 - 2 * 6.35, 297 - 2 * 6.35);
     await page.click('#addPageBtn');
     const zip = await download(page, () => page.click('#exportAllBtn'));
     expect(zip.name).toBe('sheet_63x88mm_2x3_2pages_all.zip');

@@ -131,7 +131,7 @@ PnP.init({
 
 Other APIs:
 - Presets: `presets`, `bindPreset`, `swapButton`, `machinePresets`, `bindMachinePreset`.
-- Cut files for cutting machines: `cutSvg`, `cutPath`, `inDeadMargin`.
+- Cut files for cutting machines: `cutSvg`, `cutPath`, `inDeadMargin`, `svgSize`. Every exported SVG must get its size from `svgSize(wMm, hMm)`: width and height in inches with a mm viewBox. Cricut Design Space reads the width/height numbers as inches, so `mm` sizes import about 25× too large.
 - Passing image sets between tools through IndexedDB: `handoff` (`handoff.receive(...)`) and `sendMenu`. See `itemsToFiles`.
 - UI helpers: `dropzone`, `filePicker`, `outputPreviewButton`/`previewOutput`, `toast`, `guard`/`allowLeave`. Every `dropzone` has a built-in "Pick from Inputs & outputs" button that offers only sets holding files its `accept` list takes. Use `filePicker` (with `browse`) for a file button that isn't a drop zone.
 - Project files: `project`. A `.pnp` file is a zip containing `manifest.json` and `files/`, and the manifest's `tool` must match the tool opening it. Passing `project` hooks to `PnP.init` shows New / Open / Save in the top bar. New reloads the page without its work and keeps settings. It also removes the Inputs & outputs entries recorded on that page (each set stores its `page` path).

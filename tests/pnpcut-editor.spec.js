@@ -1,5 +1,5 @@
 // PnPCut card line-art editor (PnPCut/editor.html) and the shared vector editor.
-const { test, expect, download, makeCardImages, dropFiles, jsonFile } = require('./helpers');
+const { test, expect, download, makeCardImages, dropFiles, jsonFile, expectSvgSizeInInches } = require('./helpers');
 
 const shapes = (page, layer) => page.locator(layer ? `[data-layer-group="${layer}"] .shape-el` : '#canvasSvg .shape-el');
 const cardItems = (page) => page.locator('.card-item');
@@ -291,6 +291,7 @@ test.describe('project files', () => {
     const cut = await download(page, () => page.click('#exportCutBtn'));
     expect(cut.name).toBe('Hero_63x88mm_cut.svg');
     expect(cut.text()).toContain('stroke-width="0.15"');
+    expectSvgSizeInInches(cut.text(), 63, 88);
     await page.click('#addCardBtn');
     const zip = await download(page, () => page.click('#exportCardsBtn'));
     expect(zip.name).toBe('cards_63x88mm.zip');

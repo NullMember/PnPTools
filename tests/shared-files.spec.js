@@ -1,6 +1,6 @@
 // Shared runtime: top-bar project buttons and the Inputs & outputs viewer,
 // which records files loaded into and produced by every tool.
-const { test, expect, download, makeCardImages } = require('./helpers');
+const { test, expect, download, makeCardImages, expectSvgSizeInInches } = require('./helpers');
 
 const topBar = (page) => page.locator('.pnp-topbar');
 const filesButton = (page) => page.locator('.pnp-outputs-btn');
@@ -205,4 +205,17 @@ test('the same files are listed once, and rows can be removed', async ({ page })
   await popover(page).locator('.pnp-popover-remove').click();
   await expect(popover(page).locator('.pnp-popover-row')).toHaveCount(0);
   await expect(popover(page).locator('.pnp-popover-empty')).toBeVisible();
+});
+
+test('Layout and TuckBox cut files are sized in inches', async ({ page }) => {
+  await page.goto('PnPTuckBox/index.html');
+  const box = await download(page, () => page.click('#downloadSvg'));
+  expectSvgSizeInInches(box.text());
+
+  await page.goto('PnPLayout/index.html');
+  const img = await makeCardImages(page);
+  await page.setInputFiles('#imageInput', img.alpha);
+  await expect(page.locator('#sheetGrid > *').first()).toBeVisible({ timeout: 15000 }); // packed
+  const layout = await download(page, () => page.click('#downloadSvg'));
+  expectSvgSizeInInches(layout.text());
 });
