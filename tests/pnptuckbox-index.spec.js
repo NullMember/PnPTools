@@ -23,7 +23,7 @@ test('the glueless styles are offered under "No glue"', async ({ page }) => {
 // [style, pieces, slits, folds, option field shown]
 const GLUELESS = [
   ['tuckLock', 1, 2, 14, null],
-  ['tuckHidden', 1, 0, 14, null], // ears under the closed ends: no slits at all
+  ['tuckHidden', 1, 2, 16, null], // the back/flap fold is split around its 2 slits
   ['twoPieceLock', 2, 16, 24, '#lidDepthGroup'],
   ['sleeveLock', 1, 2, 6, '#sleeveHeightGroup'],
 ];
@@ -65,4 +65,23 @@ test('a thick deck still gives a two-piece box without glue that fits A4', async
   await expect(page.locator('.summary-item', { hasText: 'Pages' }).locator('.summary-value')).toHaveText('2');
   const zip = await download(page, () => page.click('#downloadSvg')); // one SVG per page
   expect(zip.name).toBe('twoPieceLock-box-cut.zip');
+});
+
+test('hidden lock: the slits sit on the back/flap fold, which is not scored over them', async ({ page }) => {
+  await page.selectOption('#boxStyle', 'tuckHidden');
+  await expect(page.locator('#styleHint')).toContainText('no tabs show');
+  const svg = (await download(page, () => page.click('#downloadSvg'))).text();
+  const pts = (d) => [...d.matchAll(/[ML]([\d.-]+) ([\d.-]+)/g)].map((m) => [+m[1], +m[2]]);
+  const slits = [...svg.matchAll(/<path d="([^"]+)"[^>]*stroke="#e03131"/g)].map((m) => m[1])
+    .filter((d) => !d.trim().endsWith('Z')).map(pts);
+  const folds = [...svg.matchAll(/<path d="([^"]+)"[^>]*stroke="#e08e0b"/g)].map((m) => pts(m[1]));
+  expect(slits).toHaveLength(2);
+  for (const [[sx, sy0], [, sy1]] of slits) {
+    const onLine = folds.filter(([[ax], [bx]]) => Math.abs(ax - sx) < 0.01 && Math.abs(bx - sx) < 0.01);
+    expect(onLine.length).toBeGreaterThan(0); // the fold runs along the slit's line…
+    for (const [[, ay], [, by]] of onLine) {  // …but stops at its ends
+      const [lo, hi] = [Math.min(ay, by), Math.max(ay, by)];
+      expect(hi <= Math.min(sy0, sy1) + 0.01 || lo >= Math.max(sy0, sy1) - 0.01).toBe(true);
+    }
+  }
 });
