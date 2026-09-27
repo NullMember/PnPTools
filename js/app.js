@@ -18,7 +18,7 @@ const STYLE_HINTS = {
     twoPiece: 'A base tray and a slightly larger lid that slides over it. The deck lies flat.',
     sleeve: 'An open band that slides over the deck.',
     tuckLock: 'No glue. Fold the tube so the lock flap lies inside the back, then fold each arrow tab out and push it through its slit in the back. The ends tuck in as usual.',
-    tuckHidden: 'No glue, nothing shows outside. Fold the tube so the flap on the back lies inside the side next to it. At each end, fold the flap’s ear in first, then the dust flaps over it, then tuck the lid; the closed ends hold the flap. The seam holds best with both ends closed.',
+    tuckHidden: 'No glue, and no tabs show. Fold the flap on the back inside the box, along the last side. Then fold that side’s arrow tabs 90° inward and push them into the slits on the back’s corner fold, so they lock inside against the back. The ends tuck in as usual.',
     twoPieceLock: 'No glue. For each tray: fold the long walls up and their inner halves down inside, turning the corner flaps in. Then fold the short walls up over the flaps and down inside. Push every tab into its slit in the floor.',
     sleeveLock: 'No glue. Fold the band so the lock flap lies inside the back, then fold each arrow tab out and push it through its slit in the back.',
 };

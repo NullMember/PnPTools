@@ -93,7 +93,31 @@ function finishPiece(name, panels, slits = []) {
         const xs = p.poly.map((q) => q[0]), ys = p.poly.map((q) => q[1]);
         p.box = { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
     });
-    return { name, width: x1 - x0, height: y1 - y0, panels, slits, ...extractLines(panels) };
+    const { folds, cuts } = extractLines(panels);
+    return { name, width: x1 - x0, height: y1 - y0, panels, slits, cuts, folds: splitFoldsAtSlits(folds, slits) };
+}
+
+// A slit cut along a fold line takes that stretch out of the fold, so the
+// cut file doesn't also score over it.
+function splitFoldsAtSlits(folds, slits) {
+    let out = folds;
+    slits.forEach(([p, q]) => {
+        const next = [];
+        out.forEach(([a, b]) => {
+            const dx = b[0] - a[0], dy = b[1] - a[1];
+            const len2 = dx * dx + dy * dy;
+            const off = (r) => Math.abs((r[0] - a[0]) * dy - (r[1] - a[1]) * dx) / Math.sqrt(len2);
+            if (off(p) > 1e-6 || off(q) > 1e-6) { next.push([a, b]); return; }
+            const at = (r) => ((r[0] - a[0]) * dx + (r[1] - a[1]) * dy) / len2;
+            const t0 = Math.max(0, Math.min(at(p), at(q))), t1 = Math.min(1, Math.max(at(p), at(q)));
+            if (t1 <= t0) { next.push([a, b]); return; }
+            const pt = (u) => [a[0] + dx * u, a[1] + dy * u];
+            if (t0 > 1e-9) next.push([a, pt(t0)]);
+            if (t1 < 1 - 1e-9) next.push([pt(t1), b]);
+        });
+        out = next;
+    });
+    return out;
 }
 
 // ---- Dimensions ------------------------------------------------------------------------
@@ -146,12 +170,12 @@ function dustFlap(xa, xb, ya, depth, dir) {
 }
 
 // seam: 'glue' (glue flap), 'tabs' (lock flap with tabs through slits in
-// the back) or 'ears' (hidden: a flap inside the side whose ears are trapped
-// under the closed ends).
+// the back) or 'corner' (hidden: the flap on the back lies inside the last
+// side, and that side's tabs fold into slits along the back's corner fold).
 function classicTuck(cfg, { seam = 'glue' } = {}) {
     const { pw, ph, pd, t } = boxDims(cfg);
     const g = seam === 'tabs' ? 0                              // lock flap sits on the right instead
-        : seam === 'ears' ? Math.max(4, Math.min(pd - 1.5, 16)) // as wide as fits inside the side
+        : seam === 'corner' ? Math.max(4, Math.min(pd - 1.5, 16)) // as wide as fits inside the side
             : clamp(pd * 0.8, 8, 12);
     const tuck = clamp(pd * 0.8, 12, 22);    // tuck-in flap depth
     const dust = clamp(pd * 0.85, 6, 25);    // dust flap depth
@@ -183,18 +207,17 @@ function classicTuck(cfg, { seam = 'glue' } = {}) {
         panels.unshift({ id: 'glue', name: 'Glue flap', glue: true, poly: [[0, y1 + 4], [g, y1], [g, y2], [0, y2 - 4]] });
         return [finishPiece('Tuck box', panels)];
     }
-    if (seam === 'ears') {
-        // The flap lies inside the last side. Its ears fold into the box ends
-        // under the dust flaps, and the closed tuck ends hold them there.
-        const ea = 0.5, eb = g - 1;               // clear of the lid's edge at x = g
-        const ear = Math.min(dust * 0.8, pw * 0.4);
-        const taper = Math.min((eb - ea) / 3, ear * 0.35);
-        panels.unshift(
-            { id: 'lockFlap', name: 'Lock flap', poly: [[0, y1], [ea, y1], [eb, y1], [g, y1], [g, y2], [eb, y2], [ea, y2], [0, y2]] },
-            { id: 'earTop', name: 'Ear', poly: [[ea, y1], [ea + taper, y1 - ear], [eb - taper, y1 - ear], [eb, y1]] },
-            { id: 'earBottom', name: 'Ear', poly: [[ea, y2], [ea + taper, y2 + ear], [eb - taper, y2 + ear], [eb, y2]] },
-        );
-        return [finishPiece('Tuck box', panels)];
+    if (seam === 'corner') {
+        // The flap lies inside the last side. That side's arrow tabs fold 90°
+        // at the corner and push into slits on the back/flap fold, so they
+        // end up inside against the back: only the slits show, on the fold.
+        const centres = tabCentres(y1, y2);
+        const tabs = arrowTabs(xe, centres, t);
+        const side2 = panels.find((p) => p.id === 'side2');
+        side2.poly = [[xs2, y1], [xe, y1], ...tabs.edge, [xe, y2], [xs2, y2]];
+        panels.unshift({ id: 'lockFlap', name: 'Lock flap', poly: [[0, y1 + 4], [g, y1], [g, y2], [0, y2 - 4]] });
+        panels.push(...tabs.panels);
+        return [finishPiece('Tuck box', panels, slitsAt(g, centres))];
     }
     // The last side's lock flap lies inside the back; its tabs fold out
     // through slits in the back panel.
@@ -211,30 +234,45 @@ function classicTuck(cfg, { seam = 'glue' } = {}) {
 
 const LOCK = { neck: 7, head: 10, tip: 5, headLen: 4 };
 
-function lockSeam(x0, y0, y1, target, width, t) {
-    const xg = x0 + width;
+// One tab for a short edge, two for a long one.
+function tabCentres(y0, y1) {
     const h = y1 - y0;
-    const inset = Math.min(4, h / 6);
-    const centres = h > 40 ? [y0 + h * 0.25, y0 + h * 0.75] : [y0 + h / 2];
+    return h > 40 ? [y0 + h * 0.25, y0 + h * 0.75] : [y0 + h / 2];
+}
+
+// Arrow tabs hinged on a vertical edge at x = xg (pointing right), one per
+// centre. edge: the points to insert along that edge (top to bottom) so the
+// tab bases become folds.
+function arrowTabs(xg, centres, t) {
     const neckLen = t + 1.2; // through the panel, plus room to fold
     const { neck, head, tip, headLen } = LOCK;
-    const edge = [[xg, y0 + inset]];
-    const tabs = [];
-    centres.forEach((c, i) => {
+    const edge = [];
+    const panels = centres.map((c, i) => {
         edge.push([xg, c - neck / 2], [xg, c + neck / 2]);
         const xn = xg + neckLen;
-        tabs.push({
+        return {
             id: `lockTab${i + 1}`,
             name: 'Lock tab',
             poly: [[xg, c - neck / 2], [xn, c - neck / 2], [xn, c - head / 2], [xn + headLen, c - tip / 2],
                 [xn + headLen, c + tip / 2], [xn, c + head / 2], [xn, c + neck / 2], [xg, c + neck / 2]],
-        });
+        };
     });
-    edge.push([xg, y1 - inset]);
-    const flap = { id: 'lockFlap', name: 'Lock flap', poly: [[x0, y0], ...edge, [x0, y1]] };
-    const slitLen = neck + 0.6;
-    const slits = centres.map((c) => [[target + width, c - slitLen / 2], [target + width, c + slitLen / 2]]);
-    return { panels: [flap, ...tabs], slits };
+    return { edge, panels };
+}
+
+// Vertical slits at x for the tabs at these centres.
+function slitsAt(x, centres) {
+    const len = LOCK.neck + 0.6;
+    return centres.map((c) => [[x, c - len / 2], [x, c + len / 2]]);
+}
+
+function lockSeam(x0, y0, y1, target, width, t) {
+    const xg = x0 + width;
+    const inset = Math.min(4, (y1 - y0) / 6);
+    const centres = tabCentres(y0, y1);
+    const tabs = arrowTabs(xg, centres, t);
+    const flap = { id: 'lockFlap', name: 'Lock flap', poly: [[x0, y0], [xg, y0 + inset], ...tabs.edge, [xg, y1 - inset], [x0, y1]] };
+    return { panels: [flap, ...tabs.panels], slits: slitsAt(target + width, centres) };
 }
 
 // ---- Two-piece box (tray base + slightly larger lid) ---------------------------------------
@@ -411,7 +449,7 @@ const BOX_STYLES = {
     twoPiece: { label: 'Two-piece box', build: twoPiece, slots: ['lidTop', 'lidLong', 'lidShort', 'baseFloor', 'baseLong', 'baseShort'] },
     sleeve: { label: 'Sleeve / wrap', build: sleeve, slots: ['front', 'back', 'sideL', 'sideR'] },
     tuckLock: { label: 'Tuck box, tab lock', build: (cfg) => classicTuck(cfg, { seam: 'tabs' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
-    tuckHidden: { label: 'Tuck box, hidden lock', build: (cfg) => classicTuck(cfg, { seam: 'ears' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
+    tuckHidden: { label: 'Tuck box, hidden lock', build: (cfg) => classicTuck(cfg, { seam: 'corner' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
     twoPieceLock: { label: 'Two-piece box, no glue', build: twoPieceLock, slots: ['lidTop', 'lidLong', 'lidShort', 'baseFloor', 'baseLong', 'baseShort'], option: 'lidDepth' },
     sleeveLock: { label: 'Sleeve, no glue', build: sleeveLock, slots: ['front', 'back', 'sideL', 'sideR'], option: 'sleeveHeight' },
 };
