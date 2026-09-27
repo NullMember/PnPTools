@@ -17,6 +17,9 @@ const STYLE_HINTS = {
     tuck: 'One piece with a tuck-in lid and bottom. The usual card-deck box.',
     twoPiece: 'A base tray and a slightly larger lid that slides over it. The deck lies flat.',
     sleeve: 'An open band that slides over the deck.',
+    tuckLock: 'No glue. Fold the tube so the lock flap lies inside the back, then fold each arrow tab out and push it through its slit in the back. The ends tuck in as usual.',
+    twoPieceLock: 'No glue. For each tray: fold the long walls up and their inner halves down inside, turning the corner flaps in. Then fold the short walls up over the flaps and down inside. Push every tab into its slit in the floor.',
+    sleeveLock: 'No glue. Fold the band so the lock flap lies inside the back, then fold each arrow tab out and push it through its slit in the back.',
 };
 
 function num(id, fallback = 0) {
@@ -307,8 +310,8 @@ function setStatus(message, type = 'info') {
 function updateStyleUI() {
     const style = $('boxStyle').value;
     $('styleHint').textContent = STYLE_HINTS[style];
-    $('lidDepthGroup').hidden = style !== 'twoPiece';
-    $('sleeveHeightGroup').hidden = style !== 'sleeve';
+    $('lidDepthGroup').hidden = BOX_STYLES[style].option !== 'lidDepth';
+    $('sleeveHeightGroup').hidden = BOX_STYLES[style].option !== 'sleeveHeight';
 }
 
 function render() {

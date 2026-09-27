@@ -268,6 +268,12 @@ function drawPagePreview(canvas, page, ctxInfo) {
         ctx.strokeStyle = item.fits ? '#e03131' : '#ff00aa';
         ctx.lineWidth = 0.4;
         item.piece.cuts.forEach((loop) => ctx.stroke(polyPath(loop)));
+        item.piece.slits.forEach(([a, b]) => {
+            ctx.beginPath();
+            ctx.moveTo(a[0], a[1]);
+            ctx.lineTo(b[0], b[1]);
+            ctx.stroke();
+        });
 
         if (showLabels) {
             // Dark text with a light halo stays readable on any artwork.
@@ -364,6 +370,9 @@ async function buildPdf(pages, paper, art, opts, onProgress) {
                 item.piece.cuts.forEach((loop) => {
                     page.drawSvgPath(`${pagePath(loop.map(map))} Z`, { x: 0, y: H, borderColor: lineColor, borderWidth: 0.5 });
                 });
+                item.piece.slits.forEach((line) => {
+                    page.drawSvgPath(pagePath(line.map(map)), { x: 0, y: H, borderColor: lineColor, borderWidth: 0.5 });
+                });
             }
         });
     }
@@ -388,6 +397,7 @@ function buildSvg(page, paper, machineMargin) {
                 const toPagePoint = toPage(item);
                 const map = (p) => toGuide(toPagePoint(p));
                 item.piece.cuts.forEach((loop) => cut.push(PnP.cutPath(loop.map(map), '#e03131')));
+                item.piece.slits.forEach((line) => cut.push(PnP.cutPath(line.map(map), '#e03131', false)));
                 item.piece.folds.forEach(([a, b]) => score.push(PnP.cutPath([map(a), map(b)], '#e08e0b', false)));
             });
             return cut.concat(score).join('\n');
@@ -399,7 +409,7 @@ function buildSvg(page, paper, machineMargin) {
 function linesInDeadMargin(page, paper, machineMargin) {
     return page.items.some((item) => {
         const map = toPage(item);
-        const points = item.piece.cuts.flat().concat(item.piece.folds.flat()).map(map);
+        const points = item.piece.cuts.flat().concat(item.piece.folds.flat(), item.piece.slits.flat()).map(map);
         return PnP.inDeadMargin(points, paper.w, paper.h, machineMargin);
     });
 }

@@ -23,12 +23,17 @@
         <div class="content">
             <div class="sidebar">
                 <div class="panel">
-                    <div class="panel-title">Box Style <span class="help" tabindex="0" data-tip="Lid depth (two-piece box): how deep the lid is compared to the base; 100% covers the base completely, less makes a shallower lid. Sleeve height: how much of the card’s height the band covers.">?</span></div>
+                    <div class="panel-title">Box Style <span class="help" tabindex="0" data-tip="Lid depth (two-piece boxes): how deep the lid is compared to the base; 100% covers the base completely, less makes a shallower lid. Sleeve height (sleeves): how much of the card’s height the band covers. The “No glue” styles hold together with tabs pushed through slits (the short cut lines inside the pieces), with no glue or tape.">?</span></div>
                     <div class="control-group">
                         <select id="boxStyle">
                             <option value="tuck">Classic tuck box</option>
                             <option value="twoPiece">Two-piece box (lid + base)</option>
                             <option value="sleeve">Sleeve / wrap</option>
+                            <optgroup label="No glue">
+                                <option value="tuckLock">Tuck box, tab lock</option>
+                                <option value="twoPieceLock">Two-piece box, folded walls</option>
+                                <option value="sleeveLock">Sleeve, tab lock</option>
+                            </optgroup>
                         </select>
                         <div class="input-hint" id="styleHint"></div>
                     </div>
