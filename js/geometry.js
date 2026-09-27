@@ -442,6 +442,28 @@ function sleeveLock(cfg) {
     return [finishPiece('Sleeve', panels.concat(seam.panels), seam.slits)];
 }
 
+// Hidden-lock sleeve, like the hidden-lock tuck box: the flap on the back
+// folds inside along the last side, whose tabs fold into slits on the
+// back/flap fold. Only the slits show, on that corner.
+function sleeveHidden(cfg) {
+    const { pw, ph, pd, t } = boxDims(cfg);
+    const bh = ph * (cfg.sleeveHeight / 100);
+    const g = Math.max(4, Math.min(pd - 1.5, 16)); // as wide as fits inside the side
+    const xb = g, x1 = xb + pw, x2 = x1 + pd, x3 = x2 + pw, x4 = x3 + pd;
+    const inset = Math.min(4, bh / 6);
+    const centres = tabCentres(0, bh);
+    const tabs = arrowTabs(x4, centres, t);
+    const panels = [
+        { id: 'lockFlap', name: 'Lock flap', poly: [[0, inset], [xb, 0], [xb, bh], [0, bh - inset]] },
+        { id: 'back', name: 'Back', slot: 'back', poly: rect(xb, 0, pw, bh) },
+        { id: 'side1', name: 'Side', slot: 'sideL', poly: rect(x1, 0, pd, bh) },
+        { id: 'front', name: 'Front', slot: 'front', poly: rect(x2, 0, pw, bh) },
+        { id: 'side2', name: 'Side', slot: 'sideR', poly: [[x3, 0], [x4, 0], ...tabs.edge, [x4, bh], [x3, bh]] },
+        ...tabs.panels,
+    ];
+    return [finishPiece('Sleeve', panels, slitsAt(xb, centres))];
+}
+
 // ---- Public -----------------------------------------------------------------------------
 
 const BOX_STYLES = {
@@ -451,7 +473,8 @@ const BOX_STYLES = {
     tuckLock: { label: 'Tuck box, tab lock', build: (cfg) => classicTuck(cfg, { seam: 'tabs' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
     tuckHidden: { label: 'Tuck box, hidden lock', build: (cfg) => classicTuck(cfg, { seam: 'corner' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
     twoPieceLock: { label: 'Two-piece box, no glue', build: twoPieceLock, slots: ['lidTop', 'lidLong', 'lidShort', 'baseFloor', 'baseLong', 'baseShort'], option: 'lidDepth' },
-    sleeveLock: { label: 'Sleeve, no glue', build: sleeveLock, slots: ['front', 'back', 'sideL', 'sideR'], option: 'sleeveHeight' },
+    sleeveLock: { label: 'Sleeve, tab lock', build: sleeveLock, slots: ['front', 'back', 'sideL', 'sideR'], option: 'sleeveHeight' },
+    sleeveHidden: { label: 'Sleeve, hidden lock', build: sleeveHidden, slots: ['front', 'back', 'sideL', 'sideR'], option: 'sleeveHeight' },
 };
 BOX_STYLES.twoPiece.option = 'lidDepth';
 BOX_STYLES.sleeve.option = 'sleeveHeight';
