@@ -153,50 +153,83 @@ function drawPanelArt(ctx, panel, a, clip, bleed) {
     // In the rotated frame the target box is swapped for 90/270.
     const tw = rot % 180 ? h : w;
     const th = rot % 180 ? w : h;
-    drawFitted(ctx, a.img, tw, th, a.mode || 'fill', bleed);
+    drawFitted(ctx, a.img, tw, th, a, bleed);
     ctx.restore();
 }
 
-// Draw `img` centred on the origin into a tw × th box:
-//   fill     cover the box, cropping the excess
-//   fit      whole image inside the box (background shows around it)
-//   stretch  exactly the box, ignoring the aspect ratio
-//   extend   fit, then stretch the image's outermost pixels out to the box edges
-// Where the art reaches a box edge, it continues `bleed` further out: with
-// the image itself if it overflows (fill), else by stretching its edge pixels.
-function drawFitted(ctx, img, tw, th, mode, bleed = 0) {
-    const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+// Draw `img` into a tw × th box centred on the origin. a: { mode, crop, zoom, dx, dy }
+//   mode     fill: cover the box, cropping the excess · fit: the whole image
+//            inside the box · stretch: exactly the box · extend: fit, then
+//            stretch the image's outermost pixels out to the box edges
+//   crop     the part of the image used, as fractions { x, y, w, h } (whole image if absent)
+//   zoom     scale on top of the mode (1 = as the mode sizes it)
+//   dx, dy   pan, as fractions of the box size
+// Wherever the art reaches a box edge (always, for extend), it continues
+// `bleed` further out: with the image itself if it overflows, else by
+// stretching its edge pixels.
+function drawFitted(ctx, img, tw, th, a = {}, bleed = 0) {
+    const mode = a.mode || 'fill';
+    const src = croppedSource(img, a.crop);
+    const iw = src.naturalWidth || src.width, ih = src.naturalHeight || src.height;
     let dw = tw, dh = th;
     if (mode !== 'stretch') {
         const s = mode === 'fill' ? Math.max(tw / iw, th / ih) : Math.min(tw / iw, th / ih);
         dw = iw * s;
         dh = ih * s;
     }
-    // How far the art must reach on each axis: past the box by the bleed,
-    // except where Fit leaves the background showing.
+    const zoom = a.zoom > 0 ? a.zoom : 1;
+    dw *= zoom;
+    dh *= zoom;
+    const cx = (a.dx || 0) * tw, cy = (a.dy || 0) * th;
+    const L = cx - dw / 2, R = cx + dw / 2, T = cy - dh / 2, B = cy + dh / 2;
     const eps = 1e-3;
-    const ex = mode === 'fit' && dw < tw - eps ? dw / 2 : Math.max(dw / 2, tw / 2 + bleed);
-    const ey = mode === 'fit' && dh < th - eps ? dh / 2 : Math.max(dh / 2, th / 2 + bleed);
-    const bx = ex - dw / 2, by = ey - dh / 2;
-    if (bx > eps || by > eps) {
-        const e = edgeStrips(img);
+    // How far the art reaches on one side: past the box edge by the bleed if
+    // it touches that edge, else just its own edge (the background shows).
+    const reach = (edge, boxEdge, dir) => {
+        const touches = mode === 'extend' || (dir < 0 ? edge <= boxEdge + eps : edge >= boxEdge - eps);
+        if (!touches) return edge;
+        const target = boxEdge + dir * bleed;
+        return dir < 0 ? Math.min(edge, target) : Math.max(edge, target);
+    };
+    const xL = reach(L, -tw / 2, -1), xR = reach(R, tw / 2, 1);
+    const yT = reach(T, -th / 2, -1), yB = reach(B, th / 2, 1);
+    const gl = L - xL, gr = xR - R, gt = T - yT, gb = yB - B;
+    if (gl > eps || gr > eps || gt > eps || gb > eps) {
+        const e = edgeStrips(src);
         const o = Math.min(0.5, dw / 2, dh / 2); // overlap under the image so no anti-aliased seam shows
-        if (bx > eps) {
-            ctx.drawImage(e.left, -ex, -dh / 2, bx + o, dh);
-            ctx.drawImage(e.right, dw / 2 - o, -dh / 2, bx + o, dh);
-        }
-        if (by > eps) {
-            ctx.drawImage(e.top, -dw / 2, -ey, dw, by + o);
-            ctx.drawImage(e.bottom, -dw / 2, dh / 2 - o, dw, by + o);
-        }
-        if (bx > eps && by > eps) {
-            ctx.drawImage(e.tl, -ex, -ey, bx + o, by + o);
-            ctx.drawImage(e.tr, dw / 2 - o, -ey, bx + o, by + o);
-            ctx.drawImage(e.bl, -ex, dh / 2 - o, bx + o, by + o);
-            ctx.drawImage(e.br, dw / 2 - o, dh / 2 - o, bx + o, by + o);
-        }
+        if (gl > eps) ctx.drawImage(e.left, xL, T, gl + o, dh);
+        if (gr > eps) ctx.drawImage(e.right, R - o, T, gr + o, dh);
+        if (gt > eps) ctx.drawImage(e.top, L, yT, dw, gt + o);
+        if (gb > eps) ctx.drawImage(e.bottom, L, B - o, dw, gb + o);
+        if (gl > eps && gt > eps) ctx.drawImage(e.tl, xL, yT, gl + o, gt + o);
+        if (gr > eps && gt > eps) ctx.drawImage(e.tr, R - o, yT, gr + o, gt + o);
+        if (gl > eps && gb > eps) ctx.drawImage(e.bl, xL, B - o, gl + o, gb + o);
+        if (gr > eps && gb > eps) ctx.drawImage(e.br, R - o, B - o, gr + o, gb + o);
     }
-    ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+    ctx.drawImage(src, L, T, dw, dh);
+}
+
+// The kept part of a cropped image, as its own canvas, so scaling and edge
+// strips only ever see those pixels. Cached per image and crop.
+const cropCache = new WeakMap();
+function croppedSource(img, crop) {
+    if (!crop || (crop.x <= 0 && crop.y <= 0 && crop.w >= 1 && crop.h >= 1)) return img;
+    let cache = cropCache.get(img);
+    if (!cache) cropCache.set(img, (cache = new Map()));
+    const key = [crop.x, crop.y, crop.w, crop.h].map((v) => v.toFixed(4)).join(',');
+    let c = cache.get(key);
+    if (!c) {
+        const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+        const sx = Math.round(crop.x * iw), sy = Math.round(crop.y * ih);
+        const sw = Math.max(1, Math.round(crop.w * iw)), sh = Math.max(1, Math.round(crop.h * ih));
+        c = document.createElement('canvas');
+        c.width = sw;
+        c.height = sh;
+        c.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+        if (cache.size >= 8) cache.clear(); // crops change while editing; keep only recent ones
+        cache.set(key, c);
+    }
+    return c;
 }
 
 // One-pixel edge rows/columns (and corner pixels) of an image as their own canvases, so stretching

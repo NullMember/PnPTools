@@ -100,7 +100,8 @@ async function importImages(files) {
     schedule();
 }
 
-// Point a slot at a library image, keeping its rotation and mode.
+// Point a slot at a library image, keeping its rotation and mode (a new
+// image starts uncropped and centred).
 function assignImage(slot, imageId) {
     const prev = state.art[slot];
     state.art[slot] = { imageId, rot: prev ? prev.rot : 0, mode: prev ? prev.mode : 'fill' };
@@ -125,7 +126,7 @@ function resolvedArt() {
     const out = {};
     Object.entries(state.art).forEach(([slot, a]) => {
         const im = imageById(a.imageId);
-        if (im) out[slot] = { img: im.img, rot: a.rot, mode: a.mode };
+        if (im) out[slot] = { img: im.img, rot: a.rot, mode: a.mode, crop: a.crop, zoom: a.zoom, dx: a.dx, dy: a.dy };
     });
     return out;
 }
@@ -285,11 +286,42 @@ function renderSlots() {
                 b.addEventListener('click', onClick);
                 actions.append(b);
             };
-            button('⟳', 'Rotate 90°', () => { a.rot = (a.rot + 90) % 360; renderSlots(); schedule(); });
+            button('✎', 'Edit (crop, zoom, move)', () => editArt(slot));
+            button('⟳', 'Rotate 90°', () => { a.rot = (a.rot + 90) % 360; a.dx = 0; a.dy = 0; renderSlots(); schedule(); });
             button('✕', 'Clear panel', () => { delete state.art[slot]; renderSlots(); schedule(); });
         }
         row.append(thumb, info, actions);
         list.append(row);
+    });
+}
+
+// ---- Artwork editor ----------------------------------------------------------------------
+
+// The first panel showing this slot in the current layout (all panels of a
+// slot have the same size).
+function panelForSlot(slot) {
+    for (const page of state.pages) {
+        for (const item of page.items) {
+            const panel = item.piece.panels.find((p) => p.slot === slot);
+            if (panel) return panel;
+        }
+    }
+    return null;
+}
+
+function editArt(slot) {
+    const a = state.art[slot];
+    const im = a && imageById(a.imageId);
+    const panel = panelForSlot(slot);
+    if (!im || !panel) return;
+    ArtEditor.open({
+        title: `Edit artwork: ${SLOT_LABELS[slot]}`,
+        a,
+        img: im.img,
+        panel: { w: panel.box.w, h: panel.box.h, artRot: panel.artRot || 0 },
+        bleed: readOptions().bleed,
+        onChange: schedule,
+        onClose: () => renderSlots(),
     });
 }
 
@@ -362,6 +394,11 @@ function render() {
         const canvas = document.createElement('canvas');
         const k = drawPagePreview(canvas, page, { paper, art: resolvedArt(), opts, maxWidth, showLabels: $('showLabels').checked });
         attachDrop(canvas, page, k);
+        canvas.addEventListener('dblclick', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const slot = slotAt(page, (e.clientX - rect.left) / k, (e.clientY - rect.top) / k);
+            if (slot && state.art[slot]) editArt(slot);
+        });
         const cap = document.createElement('figcaption');
         cap.textContent = `Page ${i + 1} · ${page.items.map((it) => it.piece.name).join(' + ')}`;
         fig.append(canvas, cap);
@@ -484,6 +521,7 @@ PnP.init({
         getState: () => ({
             art: Object.fromEntries(Object.entries(state.art).map(([slot, a]) => [slot, {
                 image: state.images.findIndex((im) => im.id === a.imageId), rot: a.rot, mode: a.mode,
+                crop: a.crop || null, zoom: a.zoom || 1, dx: a.dx || 0, dy: a.dy || 0,
             }])),
         }),
         setFiles: (files) => { projectFiles = files; },
@@ -495,7 +533,12 @@ PnP.init({
             if (saved && saved.art) {
                 Object.entries(saved.art).forEach(([slot, a]) => {
                     const im = images[a.image];
-                    if (im) state.art[slot] = { imageId: im.id, rot: a.rot || 0, mode: ART_MODES[a.mode] ? a.mode : 'fill' };
+                    if (im) {
+                        state.art[slot] = {
+                            imageId: im.id, rot: a.rot || 0, mode: ART_MODES[a.mode] ? a.mode : 'fill',
+                            crop: a.crop || null, zoom: a.zoom || 1, dx: a.dx || 0, dy: a.dy || 0,
+                        };
+                    }
                 });
             } else {
                 // Older projects: one file per slot, named by its role.
