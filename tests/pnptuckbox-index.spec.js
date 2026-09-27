@@ -31,11 +31,11 @@ test('the glueless styles are offered under "No glue"', async ({ page }) => {
 const GLUELESS = [
   // Tuck boxes also have 2 tuck lock slits per tuck flap (top and bottom).
   ['tuckLock', 1, 6, 14, null],
-  ['tuckHidden', 1, 6, 16, null], // the back/flap fold is split around its 2 slits
-  ['tuckFixedLock', 1, 6, 20, null], // top tuck lock 2 + side seam 2 + bottom 2
+  ['tuckHidden', 1, 6, 14, null],
+  ['tuckFixedLock', 1, 6, 16, null], // top tuck lock 2 + side seam 2 + bottom 2
   ['twoPieceLock', 2, 16, 24, '#lidDepthGroup'],
   ['sleeveLock', 1, 2, 6, '#sleeveHeightGroup'],
-  ['sleeveHidden', 1, 2, 8, '#sleeveHeightGroup'], // flap fold split around 2 slits
+  ['sleeveHidden', 1, 2, 6, '#sleeveHeightGroup'],
 ];
 
 for (const [style, pieces, slits, folds, option] of GLUELESS) {
@@ -78,9 +78,9 @@ test('a thick deck still gives a two-piece box without glue that fits A4', async
   expect(zip.name).toBe('twoPieceLock-box-cut.zip');
 });
 
-// Every slit of these styles is cut along a fold line (tuck locks, corner
-// locks); the fold must run up to it but never be scored over it.
-for (const style of ['tuck', 'tuckHidden', 'tuckFixed', 'tuckFixedLock', 'sleeveHidden']) test(`${style}: slits sit on fold lines, which are not scored over them`, async ({ page }) => {
+// Tuck lock slits are cut along the tuck flap's fold; the fold must run up
+// to them but never be scored over them.
+for (const style of ['tuck', 'tuckFixed']) test(`${style}: tuck lock slits sit on the fold, which is not scored over them`, async ({ page }) => {
   await selectStyle(page, style);
   const svg = (await download(page, () => page.click('#downloadSvg'))).text();
   const pts = (d) => [...d.matchAll(/[ML]([\d.-]+) ([\d.-]+)/g)].map((m) => [+m[1], +m[2]]);
@@ -101,6 +101,42 @@ for (const style of ['tuck', 'tuckHidden', 'tuckFixed', 'tuckFixedLock', 'sleeve
       expect(hi <= s0 + 0.01 || lo >= s1 - 0.01, `fold ${a}–${b} scored over the slit ${p}–${q}`).toBe(true);
     }
   }
+});
+
+// Corner locks: each slit sits inside its lock flap, two paper thicknesses
+// (at least 0.5 mm) from the fold, so it opens on the right side of the bend.
+for (const style of ['tuckHidden', 'tuckFixedLock', 'sleeveHidden']) test(`${style}: corner slits sit just inside the lock flap`, async ({ page }) => {
+  await selectStyle(page, style);
+  const check = async (paper) => page.evaluate((expected) => {
+    const pieces = buildBox($('boxStyle').value, readConfig());
+    const out = [];
+    pieces.forEach((piece) => piece.slits.forEach(([a, b]) => {
+      const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      const flap = piece.panels.find((p) => /lockFlap|backFlap/.test(p.id)
+        && mid[0] > p.box.x && mid[0] < p.box.x + p.box.w && mid[1] > p.box.y && mid[1] < p.box.y + p.box.h);
+      if (!flap && piece.panels.some((p) => p.id === 'tuckTop')) {
+        // Not a corner slit: a tuck lock slit on the tuck fold.
+        return;
+      }
+      if (!flap) { out.push({ ok: false, why: `slit at ${mid} is in no lock flap` }); return; }
+      // Distance from the flap's fold edge (the side it shares with the back).
+      const vertical = Math.abs(a[0] - b[0]) < 1e-6;
+      const back = piece.panels.find((p) => p.id === 'back').box;
+      const fold = vertical
+        ? (Math.abs(flap.box.x + flap.box.w - back.x) < 1e-6 ? back.x : back.x + back.w)
+        : back.y + back.h;
+      const dist = vertical ? Math.abs(mid[0] - fold) : Math.abs(mid[1] - fold);
+      out.push({ ok: Math.abs(dist - expected) < 1e-6, why: `${flap.id} slit ${dist.toFixed(3)} mm from its fold` });
+    }));
+    return out;
+  }, Math.max(0.5, 2 * paper));
+  const atDefault = await check(0.3);
+  expect(atDefault.length).toBeGreaterThan(0);
+  for (const r of atDefault) expect(r.ok, r.why).toBe(true);
+
+  await page.fill('#paperThickness__display', '0.5');
+  await page.press('#paperThickness__display', 'Tab');
+  for (const r of await check(0.5)) expect(r.ok, r.why).toBe(true);
 });
 
 // ---- Artwork editor ----------------------------------------------------------
