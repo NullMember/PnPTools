@@ -139,6 +139,42 @@ for (const style of ['tuckHidden', 'tuckFixedLock', 'sleeveHidden']) test(`${sty
   for (const r of await check(0.5)) expect(r.ok, r.why).toBe(true);
 });
 
+// Hook tabs: one barb each, heads only a barb wider than the neck, slits a
+// little longer than the neck; paired barbs point away from each other.
+for (const style of ['tuckLock', 'tuckHidden', 'tuckFixedLock', 'sleeveLock', 'sleeveHidden']) test(`${style}: hook tabs fit their slits`, async ({ page }) => {
+  await selectStyle(page, style);
+  const r = await page.evaluate(() => {
+    const [piece] = buildBox($('boxStyle').value, readConfig());
+    const tabs = piece.panels.filter((p) => /Tab\d/.test(p.id));
+    // Each tab's root edge is its shared fold; measure across it.
+    return tabs.map((tab) => {
+      const [a, b] = [tab.poly[0], tab.poly[tab.poly.length - 1]]; // root endpoints
+      const alongY = Math.abs(a[0] - b[0]) < 1e-6;
+      const neck = alongY ? Math.abs(a[1] - b[1]) : Math.abs(a[0] - b[0]);
+      const lo = Math.min(alongY ? a[1] : a[0], alongY ? b[1] : b[0]);
+      const across = alongY ? tab.poly.map((q) => q[1]) : tab.poly.map((q) => q[0]);
+      const head = Math.max(...across) - Math.min(...across);
+      const barbBelow = Math.min(...across) < lo - 1e-6; // barb on the low side
+      return { id: tab.id, neck, head, barbBelow, centre: lo + neck / 2 };
+    }).concat([{ slits: piece.slits.map(([a, b]) => Math.hypot(a[0] - b[0], a[1] - b[1])) }]);
+  });
+  const slits = r.pop().slits.filter((len) => len > 7); // tuck lock slits are shorter
+  expect(slits.length).toBeGreaterThan(0);
+  for (const len of slits) expect(len).toBeCloseTo(7.8, 5);
+  for (const tab of r) {
+    expect(tab.neck).toBeCloseTo(7, 5);
+    expect(tab.head).toBeCloseTo(7 + 1.6, 5); // one barb, not a two-sided arrowhead
+  }
+  // Tabs on the same edge (same kind of id) come in pairs with opposite barbs.
+  const groups = {};
+  r.forEach((t) => (groups[t.id.replace(/\d$/, '')] ||= []).push(t));
+  Object.values(groups).filter((g) => g.length === 2).forEach(([a, b]) => {
+    const [first, second] = a.centre < b.centre ? [a, b] : [b, a];
+    expect(first.barbBelow).toBe(true);   // the lower tab's barb points down (outwards)…
+    expect(second.barbBelow).toBe(false); // …the upper one's up
+  });
+});
+
 // ---- Artwork editor ----------------------------------------------------------
 
 async function addArt(page) {
