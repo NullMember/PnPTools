@@ -19,11 +19,11 @@ const STYLE_HINTS = {
     twoPiece: 'A base tray and a slightly larger lid that slides over it. The deck lies flat.',
     sleeve: 'An open band that slides over the deck.',
     tuckLock: 'No glue. Fold the tube so the lock flap lies inside the back, then fold each arrow tab out and push it through its slit in the back. The ends tuck in as usual.',
-    tuckFixedLock: 'No glue, and a bottom that stays shut. Close the side as for the hidden lock. At the bottom, fold the dust flaps in, then the flap on the back, then the bottom; fold the bottom’s arrow tabs 90° up into the slits on the back’s bottom fold. Only the lid opens.',
-    tuckHidden: 'No glue, and no tabs show. Fold the flap on the back inside the box, along the last side. Then fold that side’s arrow tabs 90° inward and push them into the slits on the back’s corner fold, so they lock inside against the back. The ends tuck in as usual.',
+    tuckFixedLock: 'No glue, and a bottom that stays shut. Close the side as for the hidden lock. At the bottom, fold the dust flaps in, then the flap on the back, then the bottom; fold the bottom’s arrow tabs 90° up into the slits just inside the back’s flap. Only the lid opens.',
+    tuckHidden: 'No glue, and no tabs show. Fold the flap on the back inside the box, along the last side. Then fold that side’s arrow tabs 90° inward and push them into the slits just inside the flap, by the corner, so they lock inside. The ends tuck in as usual.',
     twoPieceLock: 'No glue. For each tray: fold the long walls up and their inner halves down inside, turning the corner flaps in. Then fold the short walls up over the flaps and down inside. Push every tab into its slit in the floor.',
     sleeveLock: 'No glue. Fold the band so the lock flap lies inside the back, then fold each arrow tab out and push it through its slit in the back.',
-    sleeveHidden: 'No glue, and no tabs show. Fold the flap on the back inside the band, along the last side. Then fold that side’s arrow tabs 90° inward and push them into the slits on the back’s corner fold, so they lock inside against the back.',
+    sleeveHidden: 'No glue, and no tabs show. Fold the flap on the back inside the band, along the last side. Then fold that side’s arrow tabs 90° inward and push them into the slits just inside the flap, by the corner, so they lock inside.',
 };
 
 function num(id, fallback = 0) {

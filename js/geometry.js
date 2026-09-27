@@ -171,10 +171,10 @@ function dustFlap(xa, xb, ya, depth, dir) {
 
 // seam: 'glue' (glue flap), 'tabs' (lock flap with tabs through slits in
 // the back) or 'corner' (hidden: the flap on the back lies inside the last
-// side, and that side's tabs fold into slits along the back's corner fold).
+// side, and that side's tabs fold into slits just inside it, by the corner).
 // bottom: 'tuck' (opens like the top), 'glue' (a glue flap instead of the
-// tuck flap) or 'corner' (hidden lock: the bottom's tabs fold into slits on
-// the fold of an inner flap on the back's bottom edge).
+// tuck flap) or 'corner' (hidden lock: the bottom's tabs fold into slits in
+// an inner flap on the back's bottom edge, just past its fold).
 // Every tuck flap gets lock slits at both ends of its fold, which the dust
 // flaps catch in when the box is closed.
 function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
@@ -212,7 +212,8 @@ function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
     if (bottom === 'corner') {
         // Tabs on the bottom's free edge (built on a vertical edge, axes swapped).
         const centres = tabCentres(xf, xs2);
-        const tabs = arrowTabs(yb, centres, t);
+        const off = cornerSlitOffset(t);
+        const tabs = arrowTabs(yb, centres, t, off);
         const swap = ([u, v]) => [v, u];
         panels.push(
             { id: 'bottom', name: 'Bottom', slot: 'bottom', poly: [[xf, y2], [xs2, y2], [xs2, yb], ...tabs.edge.map(swap).reverse(), [xf, yb]] },
@@ -223,7 +224,7 @@ function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
         const len = LOCK.neck + 0.6;
         centres.forEach((c) => {
             const x = xs1 - (c - xf);
-            slits.push([[x - len / 2, y2], [x + len / 2, y2]]);
+            slits.push([[x - len / 2, y2 + off], [x + len / 2, y2 + off]]); // into the back's lock flap
         });
     } else {
         panels.push({ id: 'bottom', name: 'Bottom', slot: 'bottom', poly: rect(xf, y2, pw, pd) });
@@ -241,15 +242,16 @@ function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
     }
     if (seam === 'corner') {
         // The flap lies inside the last side. That side's arrow tabs fold 90°
-        // at the corner and push into slits on the back/flap fold, so they
-        // end up inside against the back: only the slits show, on the fold.
+        // at the corner and push into slits just inside the lock flap, next to
+        // the back/flap fold, so they end up inside: only the slits show.
         const centres = tabCentres(y1, y2);
-        const tabs = arrowTabs(xe, centres, t);
+        const off = cornerSlitOffset(t);
+        const tabs = arrowTabs(xe, centres, t, off);
         const side2 = panels.find((p) => p.id === 'side2');
         side2.poly = [[xs2, y1], [xe, y1], ...tabs.edge, [xe, y2], [xs2, y2]];
         panels.unshift({ id: 'lockFlap', name: 'Lock flap', poly: [[0, y1 + 4], [g, y1], [g, y2], [0, y2 - 4]] });
         panels.push(...tabs.panels);
-        return [finishPiece('Tuck box', panels, slits.concat(slitsAt(g, centres)))];
+        return [finishPiece('Tuck box', panels, slits.concat(slitsAt(g - off, centres)))]; // into the lock flap
     }
     // The last side's lock flap lies inside the back; its tabs fold out
     // through slits in the back panel.
@@ -283,8 +285,8 @@ function tabCentres(y0, y1) {
 // Arrow tabs hinged on a vertical edge at x = xg (pointing right), one per
 // centre. edge: the points to insert along that edge (top to bottom) so the
 // tab bases become folds.
-function arrowTabs(xg, centres, t) {
-    const neckLen = t + 1.2; // through the panel, plus room to fold
+function arrowTabs(xg, centres, t, reach = 0) {
+    const neckLen = t + 1.2 + reach; // through the panel, plus room to fold, plus any reach past a corner
     const { neck, head, tip, headLen } = LOCK;
     const edge = [];
     const panels = centres.map((c, i) => {
@@ -299,6 +301,11 @@ function arrowTabs(xg, centres, t) {
     });
     return { edge, panels };
 }
+
+// Corner locks cut their slits this far into the lock flap rather than on its
+// fold: a fold never lands exactly on its line, and a slit on it can open on
+// the wrong side of the bend. Two paper thicknesses clears the bend.
+const cornerSlitOffset = (t) => Math.max(0.5, 2 * t);
 
 // Vertical slits at x for the tabs at these centres.
 function slitsAt(x, centres) {
@@ -483,8 +490,8 @@ function sleeveLock(cfg) {
 }
 
 // Hidden-lock sleeve, like the hidden-lock tuck box: the flap on the back
-// folds inside along the last side, whose tabs fold into slits on the
-// back/flap fold. Only the slits show, on that corner.
+// folds inside along the last side, whose tabs fold into slits just inside
+// the flap, by the corner. Only the slits show, at that corner.
 function sleeveHidden(cfg) {
     const { pw, ph, pd, t } = boxDims(cfg);
     const bh = ph * (cfg.sleeveHeight / 100);
@@ -492,7 +499,8 @@ function sleeveHidden(cfg) {
     const xb = g, x1 = xb + pw, x2 = x1 + pd, x3 = x2 + pw, x4 = x3 + pd;
     const inset = Math.min(4, bh / 6);
     const centres = tabCentres(0, bh);
-    const tabs = arrowTabs(x4, centres, t);
+    const off = cornerSlitOffset(t);
+    const tabs = arrowTabs(x4, centres, t, off);
     const panels = [
         { id: 'lockFlap', name: 'Lock flap', poly: [[0, inset], [xb, 0], [xb, bh], [0, bh - inset]] },
         { id: 'back', name: 'Back', slot: 'back', poly: rect(xb, 0, pw, bh) },
@@ -501,7 +509,7 @@ function sleeveHidden(cfg) {
         { id: 'side2', name: 'Side', slot: 'sideR', poly: [[x3, 0], [x4, 0], ...tabs.edge, [x4, bh], [x3, bh]] },
         ...tabs.panels,
     ];
-    return [finishPiece('Sleeve', panels, slitsAt(xb, centres))];
+    return [finishPiece('Sleeve', panels, slitsAt(xb - off, centres))]; // into the lock flap
 }
 
 // ---- Public -----------------------------------------------------------------------------
