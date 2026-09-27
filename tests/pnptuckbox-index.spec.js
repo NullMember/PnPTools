@@ -11,19 +11,28 @@ function cutLines(svgText) {
 }
 const scoreLines = (svgText) => (svgText.match(/stroke="#e08e0b"/g) || []).length;
 
+// Pick a style and wait for the redraw (it runs just after the change and
+// sets the style's hint), so exports use the new layout.
+async function selectStyle(page, style) {
+  await page.selectOption('#boxStyle', style);
+  await expect(page.locator('#styleHint')).toHaveText(await page.evaluate((st) => STYLE_HINTS[st], style));
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('PnPTuckBox/index.html');
 });
 
 test('the glueless styles are offered under "No glue"', async ({ page }) => {
   const labels = await page.locator('#boxStyle optgroup[label="No glue"] option').allTextContents();
-  expect(labels).toEqual(['Tuck box, tab lock', 'Tuck box, hidden lock', 'Two-piece box, folded walls', 'Sleeve, tab lock', 'Sleeve, hidden lock']);
+  expect(labels).toEqual(['Tuck box, tab lock', 'Tuck box, hidden lock', 'Tuck box, fixed bottom', 'Two-piece box, folded walls', 'Sleeve, tab lock', 'Sleeve, hidden lock']);
 });
 
 // [style, pieces, slits, folds, option field shown]
 const GLUELESS = [
-  ['tuckLock', 1, 2, 14, null],
-  ['tuckHidden', 1, 2, 16, null], // the back/flap fold is split around its 2 slits
+  // Tuck boxes also have 2 tuck lock slits per tuck flap (top and bottom).
+  ['tuckLock', 1, 6, 14, null],
+  ['tuckHidden', 1, 6, 16, null], // the back/flap fold is split around its 2 slits
+  ['tuckFixedLock', 1, 6, 20, null], // top tuck lock 2 + side seam 2 + bottom 2
   ['twoPieceLock', 2, 16, 24, '#lidDepthGroup'],
   ['sleeveLock', 1, 2, 6, '#sleeveHeightGroup'],
   ['sleeveHidden', 1, 2, 8, '#sleeveHeightGroup'], // flap fold split around 2 slits
@@ -31,7 +40,7 @@ const GLUELESS = [
 
 for (const [style, pieces, slits, folds, option] of GLUELESS) {
   test(`${style}: one closed outline per piece, its slits and folds`, async ({ page }) => {
-    await page.selectOption('#boxStyle', style);
+    await selectStyle(page, style);
     await expect(page.locator('#styleHint')).toContainText('No glue');
     for (const group of ['#lidDepthGroup', '#sleeveHeightGroup']) {
       if (group === option) await expect(page.locator(group)).toBeVisible();
@@ -50,16 +59,17 @@ for (const [style, pieces, slits, folds, option] of GLUELESS) {
   });
 }
 
-test('the glued styles keep their glue flaps and have no slits', async ({ page }) => {
-  for (const style of ['tuck', 'twoPiece', 'sleeve']) {
-    await page.selectOption('#boxStyle', style);
+test('glued styles: only the tuck flaps have lock slits', async ({ page }) => {
+  // [style, slits]: 2 per tuck flap; the glued-bottom box tucks at the top only.
+  for (const [style, slits] of [['tuck', 4], ['tuckFixed', 2], ['twoPiece', 0], ['sleeve', 0]]) {
+    await selectStyle(page, style);
     const svg = await download(page, () => page.click('#downloadSvg'));
-    expect(cutLines(svg.text()).slits).toBe(0);
+    expect(cutLines(svg.text()), style).toEqual({ outlines: style === 'twoPiece' ? 2 : 1, slits });
   }
 });
 
 test('a thick deck still gives a two-piece box without glue that fits A4', async ({ page }) => {
-  await page.selectOption('#boxStyle', 'twoPieceLock');
+  await selectStyle(page, 'twoPieceLock');
   await page.fill('#cardCount', '100');
   await page.press('#cardCount', 'Tab');
   await expect(page.locator('#status')).toBeHidden(); // no "larger than the printable area"
@@ -68,21 +78,27 @@ test('a thick deck still gives a two-piece box without glue that fits A4', async
   expect(zip.name).toBe('twoPieceLock-box-cut.zip');
 });
 
-for (const style of ['tuckHidden', 'sleeveHidden']) test(`${style}: the slits sit on the back/flap fold, which is not scored over them`, async ({ page }) => {
-  await page.selectOption('#boxStyle', style);
-  await expect(page.locator('#styleHint')).toContainText('no tabs show');
+// Every slit of these styles is cut along a fold line (tuck locks, corner
+// locks); the fold must run up to it but never be scored over it.
+for (const style of ['tuck', 'tuckHidden', 'tuckFixed', 'tuckFixedLock', 'sleeveHidden']) test(`${style}: slits sit on fold lines, which are not scored over them`, async ({ page }) => {
+  await selectStyle(page, style);
   const svg = (await download(page, () => page.click('#downloadSvg'))).text();
   const pts = (d) => [...d.matchAll(/[ML]([\d.-]+) ([\d.-]+)/g)].map((m) => [+m[1], +m[2]]);
   const slits = [...svg.matchAll(/<path d="([^"]+)"[^>]*stroke="#e03131"/g)].map((m) => m[1])
     .filter((d) => !d.trim().endsWith('Z')).map(pts);
   const folds = [...svg.matchAll(/<path d="([^"]+)"[^>]*stroke="#e08e0b"/g)].map((m) => pts(m[1]));
-  expect(slits).toHaveLength(2);
-  for (const [[sx, sy0], [, sy1]] of slits) {
-    const onLine = folds.filter(([[ax], [bx]]) => Math.abs(ax - sx) < 0.01 && Math.abs(bx - sx) < 0.01);
-    expect(onLine.length).toBeGreaterThan(0); // the fold runs along the slit's line…
-    for (const [[, ay], [, by]] of onLine) {  // …but stops at its ends
-      const [lo, hi] = [Math.min(ay, by), Math.max(ay, by)];
-      expect(hi <= Math.min(sy0, sy1) + 0.01 || lo >= Math.max(sy0, sy1) - 0.01).toBe(true);
+  expect(slits.length).toBeGreaterThan(0);
+  for (const [p, q] of slits) {
+    // Work along the slit's own axis: u runs along it, v across it.
+    const horizontal = Math.abs(p[1] - q[1]) < 0.01;
+    const u = (r) => (horizontal ? r[0] : r[1]);
+    const v = (r) => (horizontal ? r[1] : r[0]);
+    const onLine = folds.filter(([a, b]) => Math.abs(v(a) - v(p)) < 0.01 && Math.abs(v(b) - v(p)) < 0.01);
+    expect(onLine.length, `a fold runs along the slit at ${p}`).toBeGreaterThan(0);
+    const [s0, s1] = [Math.min(u(p), u(q)), Math.max(u(p), u(q))];
+    for (const [a, b] of onLine) { // …but stops at the slit's ends
+      const [lo, hi] = [Math.min(u(a), u(b)), Math.max(u(a), u(b))];
+      expect(hi <= s0 + 0.01 || lo >= s1 - 0.01, `fold ${a}–${b} scored over the slit ${p}–${q}`).toBe(true);
     }
   }
 });
