@@ -175,6 +175,35 @@ for (const style of ['tuckLock', 'tuckHidden', 'tuckFixedLock', 'sleeveLock', 's
   });
 });
 
+// Dust flaps are square (not tapered) on the side that meets a tuck lock, so
+// their corner catches in the lock slit: the front side at the top (the lid
+// tucks in along the front), the back side at the bottom (only where the
+// bottom tucks in too). Returns the square side per flap: 'a' is the flap's
+// left end, 'b' its right end in the flat layout.
+const EXPECTED_SQUARE = {
+  tuck: { dust1: 'b', dust2: 'a', dust3: 'a', dust4: 'b' },
+  tuckLock: { dust1: 'b', dust2: 'a', dust3: 'a', dust4: 'b' },
+  tuckHidden: { dust1: 'b', dust2: 'a', dust3: 'a', dust4: 'b' },
+  tuckFixed: { dust1: 'b', dust2: 'a', dust3: '-', dust4: '-' },
+  tuckFixedLock: { dust1: 'b', dust2: 'a', dust3: '-', dust4: '-' },
+};
+for (const [style, expected] of Object.entries(EXPECTED_SQUARE)) test(`${style}: dust flaps are square where they meet a tuck lock`, async ({ page }) => {
+  await selectStyle(page, style);
+  const square = await page.evaluate(() => {
+    const [piece] = buildBox($('boxStyle').value, readConfig());
+    const out = {};
+    ['dust1', 'dust2', 'dust3', 'dust4'].forEach((id) => {
+      const q = piece.panels.find((p) => p.id === id).poly;
+      // A square side runs straight out from the fold: its two outer points share an x.
+      const a = Math.abs(q[1][0] - q[2][0]) < 1e-9 ? 'a' : '';
+      const b = Math.abs(q[3][0] - q[4][0]) < 1e-9 ? 'b' : '';
+      out[id] = a + b || '-';
+    });
+    return out;
+  });
+  expect(square).toEqual(expected);
+});
+
 // ---- Artwork editor ----------------------------------------------------------
 
 async function addArt(page) {
