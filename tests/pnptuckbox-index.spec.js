@@ -17,18 +17,19 @@ test.beforeEach(async ({ page }) => {
 
 test('the glueless styles are offered under "No glue"', async ({ page }) => {
   const labels = await page.locator('#boxStyle optgroup[label="No glue"] option').allTextContents();
-  expect(labels).toEqual(['Tuck box, tab lock', 'Two-piece box, folded walls', 'Sleeve, tab lock']);
+  expect(labels).toEqual(['Tuck box, tab lock', 'Tuck box, hidden lock', 'Two-piece box, folded walls', 'Sleeve, tab lock']);
 });
 
 // [style, pieces, slits, folds, option field shown]
 const GLUELESS = [
   ['tuckLock', 1, 2, 14, null],
+  ['tuckHidden', 1, 0, 14, null], // ears under the closed ends: no slits at all
   ['twoPieceLock', 2, 16, 24, '#lidDepthGroup'],
   ['sleeveLock', 1, 2, 6, '#sleeveHeightGroup'],
 ];
 
 for (const [style, pieces, slits, folds, option] of GLUELESS) {
-  test(`${style}: one closed outline per piece, slits for the tabs, no glue areas`, async ({ page }) => {
+  test(`${style}: one closed outline per piece, its slits and folds`, async ({ page }) => {
     await page.selectOption('#boxStyle', style);
     await expect(page.locator('#styleHint')).toContainText('No glue');
     for (const group of ['#lidDepthGroup', '#sleeveHeightGroup']) {
