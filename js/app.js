@@ -117,7 +117,14 @@ async function assignFile(slot, file) {
     if (im) assignImage(slot, im.id);
 }
 
+// Thumbnails reuse an image's blob URL, so it is only released once the
+// image leaves the library.
+function releaseImage(im) {
+    if (im.img.src.startsWith('blob:')) URL.revokeObjectURL(im.img.src);
+}
+
 function removeImage(id) {
+    state.images.filter((im) => im.id === id).forEach(releaseImage);
     state.images = state.images.filter((im) => im.id !== id);
     Object.keys(state.art).forEach((slot) => { if (state.art[slot].imageId === id) delete state.art[slot]; });
     renderSlots();
@@ -529,6 +536,7 @@ PnP.init({
         }),
         setFiles: (files) => { projectFiles = files; },
         setState: async (saved) => {
+            state.images.forEach(releaseImage);
             state.images = [];
             state.art = {};
             const images = [];
