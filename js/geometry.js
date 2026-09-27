@@ -145,9 +145,14 @@ function dustFlap(xa, xb, ya, depth, dir) {
     return [[xa, ya], [xa + 1, ya + dir * 2], [xa + 1 + taper, yt], [xb - 1 - taper, yt], [xb - 1, ya + dir * 2], [xb, ya]];
 }
 
-function classicTuck(cfg, { lock = false } = {}) {
+// seam: 'glue' (glue flap), 'tabs' (lock flap with tabs through slits in
+// the back) or 'ears' (hidden: a flap inside the side whose ears are trapped
+// under the closed ends).
+function classicTuck(cfg, { seam = 'glue' } = {}) {
     const { pw, ph, pd, t } = boxDims(cfg);
-    const g = lock ? 0 : clamp(pd * 0.8, 8, 12); // glue flap (the lock version has a lock flap instead)
+    const g = seam === 'tabs' ? 0                              // lock flap sits on the right instead
+        : seam === 'ears' ? Math.max(4, Math.min(pd - 1.5, 16)) // as wide as fits inside the side
+            : clamp(pd * 0.8, 8, 12);
     const tuck = clamp(pd * 0.8, 12, 22);    // tuck-in flap depth
     const dust = clamp(pd * 0.85, 6, 25);    // dust flap depth
     const notchR = Math.min(pw * 0.18, 12);  // thumb notch radius
@@ -174,14 +179,27 @@ function classicTuck(cfg, { lock = false } = {}) {
         { id: 'dust3', name: 'Dust flap', poly: dustFlap(xs1, xf, y2, dust, 1) },
         { id: 'dust4', name: 'Dust flap', poly: dustFlap(xs2, xe, y2, dust, 1) },
     ];
-    if (!lock) {
+    if (seam === 'glue') {
         panels.unshift({ id: 'glue', name: 'Glue flap', glue: true, poly: [[0, y1 + 4], [g, y1], [g, y2], [0, y2 - 4]] });
+        return [finishPiece('Tuck box', panels)];
+    }
+    if (seam === 'ears') {
+        // The flap lies inside the last side. Its ears fold into the box ends
+        // under the dust flaps, and the closed tuck ends hold them there.
+        const ea = 0.5, eb = g - 1;               // clear of the lid's edge at x = g
+        const ear = Math.min(dust * 0.8, pw * 0.4);
+        const taper = Math.min((eb - ea) / 3, ear * 0.35);
+        panels.unshift(
+            { id: 'lockFlap', name: 'Lock flap', poly: [[0, y1], [ea, y1], [eb, y1], [g, y1], [g, y2], [eb, y2], [ea, y2], [0, y2]] },
+            { id: 'earTop', name: 'Ear', poly: [[ea, y1], [ea + taper, y1 - ear], [eb - taper, y1 - ear], [eb, y1]] },
+            { id: 'earBottom', name: 'Ear', poly: [[ea, y2], [ea + taper, y2 + ear], [eb - taper, y2 + ear], [eb, y2]] },
+        );
         return [finishPiece('Tuck box', panels)];
     }
     // The last side's lock flap lies inside the back; its tabs fold out
     // through slits in the back panel.
-    const seam = lockSeam(xe, y1, y2, xb, clamp(pd * 0.8, 8, Math.min(14, pw / 3)), t);
-    return [finishPiece('Tuck box', panels.concat(seam.panels), seam.slits)];
+    const lock = lockSeam(xe, y1, y2, xb, clamp(pd * 0.8, 8, Math.min(14, pw / 3)), t);
+    return [finishPiece('Tuck box', panels.concat(lock.panels), lock.slits)];
 }
 
 // ---- Glueless seams and tabs ----------------------------------------------------------------
@@ -392,7 +410,8 @@ const BOX_STYLES = {
     tuck: { label: 'Classic tuck box', build: classicTuck, slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
     twoPiece: { label: 'Two-piece box', build: twoPiece, slots: ['lidTop', 'lidLong', 'lidShort', 'baseFloor', 'baseLong', 'baseShort'] },
     sleeve: { label: 'Sleeve / wrap', build: sleeve, slots: ['front', 'back', 'sideL', 'sideR'] },
-    tuckLock: { label: 'Tuck box, no glue', build: (cfg) => classicTuck(cfg, { lock: true }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
+    tuckLock: { label: 'Tuck box, tab lock', build: (cfg) => classicTuck(cfg, { seam: 'tabs' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
+    tuckHidden: { label: 'Tuck box, hidden lock', build: (cfg) => classicTuck(cfg, { seam: 'ears' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
     twoPieceLock: { label: 'Two-piece box, no glue', build: twoPieceLock, slots: ['lidTop', 'lidLong', 'lidShort', 'baseFloor', 'baseLong', 'baseShort'], option: 'lidDepth' },
     sleeveLock: { label: 'Sleeve, no glue', build: sleeveLock, slots: ['front', 'back', 'sideL', 'sideR'], option: 'sleeveHeight' },
 };
