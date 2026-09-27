@@ -1,5 +1,5 @@
 // PnPTuckBox (PnPTuckBox/index.html): box styles, including the glueless ones.
-const { test, expect, download, expectSvgSizeInInches } = require('./helpers');
+const { test, expect, download, expectSvgSizeInInches, trackRevokedUrls, revokedUrls } = require('./helpers');
 
 // Cut paths in an SVG: closed outlines end in Z, slits are open two-point lines.
 function cutLines(svgText) {
@@ -117,6 +117,16 @@ async function addArt(page) {
   await page.setInputFiles('#artInput', { name: 'art.png', mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') });
   await expect(page.getByRole('button', { name: 'Edit (crop, zoom, move): Front' })).toBeVisible();
 }
+
+test('removing an image from the library releases its memory', async ({ page }) => {
+  await trackRevokedUrls(page);
+  await page.goto('PnPTuckBox/index.html');
+  await addArt(page);
+  const url = await page.evaluate(() => state.images[0].img.src);
+  expect(url).toMatch(/^blob:/);
+  await page.getByRole('button', { name: 'Remove art.png' }).click();
+  expect(await revokedUrls(page)).toContain(url);
+});
 
 const frontArt = (page) => page.evaluate(() => JSON.parse(JSON.stringify(state.art.front)));
 const previewPixels = (page) => page.locator('#sheetGrid canvas').first().evaluate((c) => c.toDataURL());

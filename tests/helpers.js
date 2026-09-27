@@ -70,6 +70,17 @@ function expectSvgSizeInInches(svgText, wMm, hMm) {
   if (hMm != null) base.expect(vbH).toBeCloseTo(hMm, 2);
 }
 
+// Call before page.goto: afterwards `revokedUrls(page)` lists every blob URL
+// the page has released (fetching a released URL would log a console error).
+async function trackRevokedUrls(page) {
+  await page.addInitScript(() => {
+    window.__revoked = [];
+    const revoke = URL.revokeObjectURL.bind(URL);
+    URL.revokeObjectURL = (u) => { window.__revoked.push(u); revoke(u); };
+  });
+}
+const revokedUrls = (page) => page.evaluate(() => window.__revoked);
+
 const jsonFile = (name, data) => ({ name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data)) });
 
-module.exports = { test, expect: base.expect, download, makeCardImages, dropFiles, jsonFile, expectSvgSizeInInches };
+module.exports = { test, expect: base.expect, download, makeCardImages, dropFiles, jsonFile, expectSvgSizeInInches, trackRevokedUrls, revokedUrls };
