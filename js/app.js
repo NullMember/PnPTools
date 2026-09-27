@@ -14,10 +14,12 @@ const ART_MODES = { fill: 'Fill', fit: 'Fit', stretch: 'Stretch', extend: 'Exten
 const IMAGE_DRAG_TYPE = 'application/x-pnp-image';
 
 const STYLE_HINTS = {
-    tuck: 'One piece with a tuck-in lid and bottom. The usual card-deck box.',
+    tuck: 'One piece with a tuck-in lid and bottom. The usual card-deck box. The short cuts at the ends of each tuck fold catch the dust flaps and hold the lid shut.',
+    tuckFixed: 'A tuck box whose bottom is glued shut: glue the side seam, then fold the bottom dust flaps in and glue the bottom’s flap inside the back. Only the lid opens.',
     twoPiece: 'A base tray and a slightly larger lid that slides over it. The deck lies flat.',
     sleeve: 'An open band that slides over the deck.',
     tuckLock: 'No glue. Fold the tube so the lock flap lies inside the back, then fold each arrow tab out and push it through its slit in the back. The ends tuck in as usual.',
+    tuckFixedLock: 'No glue, and a bottom that stays shut. Close the side as for the hidden lock. At the bottom, fold the dust flaps in, then the flap on the back, then the bottom; fold the bottom’s arrow tabs 90° up into the slits on the back’s bottom fold. Only the lid opens.',
     tuckHidden: 'No glue, and no tabs show. Fold the flap on the back inside the box, along the last side. Then fold that side’s arrow tabs 90° inward and push them into the slits on the back’s corner fold, so they lock inside against the back. The ends tuck in as usual.',
     twoPieceLock: 'No glue. For each tray: fold the long walls up and their inner halves down inside, turning the corner flaps in. Then fold the short walls up over the flaps and down inside. Push every tab into its slit in the floor.',
     sleeveLock: 'No glue. Fold the band so the lock flap lies inside the back, then fold each arrow tab out and push it through its slit in the back.',

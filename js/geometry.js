@@ -172,7 +172,12 @@ function dustFlap(xa, xb, ya, depth, dir) {
 // seam: 'glue' (glue flap), 'tabs' (lock flap with tabs through slits in
 // the back) or 'corner' (hidden: the flap on the back lies inside the last
 // side, and that side's tabs fold into slits along the back's corner fold).
-function classicTuck(cfg, { seam = 'glue' } = {}) {
+// bottom: 'tuck' (opens like the top), 'glue' (a glue flap instead of the
+// tuck flap) or 'corner' (hidden lock: the bottom's tabs fold into slits on
+// the fold of an inner flap on the back's bottom edge).
+// Every tuck flap gets lock slits at both ends of its fold, which the dust
+// flaps catch in when the box is closed.
+function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
     const { pw, ph, pd, t } = boxDims(cfg);
     const g = seam === 'tabs' ? 0                              // lock flap sits on the right instead
         : seam === 'corner' ? Math.max(4, Math.min(pd - 1.5, 16)) // as wide as fits inside the side
@@ -180,9 +185,10 @@ function classicTuck(cfg, { seam = 'glue' } = {}) {
     const tuck = clamp(pd * 0.8, 12, 22);    // tuck-in flap depth
     const dust = clamp(pd * 0.85, 6, 25);    // dust flap depth
     const notchR = Math.min(pw * 0.18, 12);  // thumb notch radius
+    const glueDepth = clamp(pd * 0.8, 8, 12);
 
     const xb = g, xs1 = g + pw, xf = xs1 + pd, xs2 = xf + pw, xe = xs2 + pd;
-    const y1 = tuck + pd, y2 = y1 + ph;
+    const y1 = tuck + pd, y2 = y1 + ph, yb = y2 + pd;
     const cx = xf + pw / 2;
 
     const front = [[xf, y1], [cx - notchR, y1], ...arc(cx, y1, notchR, 180, 0).slice(0, -1), [cx + notchR, y1], [xs2, y1], [xs2, y2], [xf, y2]];
@@ -198,14 +204,40 @@ function classicTuck(cfg, { seam = 'glue' } = {}) {
         { id: 'tuckTop', name: 'Tuck flap', poly: tuckFlap(xb, xs1, y1 - pd, tuck, -1) },
         { id: 'dust1', name: 'Dust flap', poly: dustFlap(xs1, xf, y1, dust, -1) },
         { id: 'dust2', name: 'Dust flap', poly: dustFlap(xs2, xe, y1, dust, -1) },
-        { id: 'bottom', name: 'Bottom', slot: 'bottom', poly: rect(xf, y2, pw, pd) },
-        { id: 'tuckBottom', name: 'Tuck flap', poly: tuckFlap(xf, xs2, y2 + pd, tuck, 1) },
         { id: 'dust3', name: 'Dust flap', poly: dustFlap(xs1, xf, y2, dust, 1) },
         { id: 'dust4', name: 'Dust flap', poly: dustFlap(xs2, xe, y2, dust, 1) },
     ];
+    const slits = tuckLockSlits(xb, xs1, y1 - pd, pd);
+
+    if (bottom === 'corner') {
+        // Tabs on the bottom's free edge (built on a vertical edge, axes swapped).
+        const centres = tabCentres(xf, xs2);
+        const tabs = arrowTabs(yb, centres, t);
+        const swap = ([u, v]) => [v, u];
+        panels.push(
+            { id: 'bottom', name: 'Bottom', slot: 'bottom', poly: [[xf, y2], [xs2, y2], [xs2, yb], ...tabs.edge.map(swap).reverse(), [xf, yb]] },
+            ...tabs.panels.map((p) => ({ ...p, id: `bottomTab${p.id.slice(-1)}`, poly: p.poly.map(swap) })),
+            { id: 'backFlap', name: 'Lock flap', poly: dustFlap(xb, xs1, y2, Math.max(4, Math.min(pd - 1.5, 16)), 1) },
+        );
+        // The bottom folds across from the front, so its tabs meet the back mirrored.
+        const len = LOCK.neck + 0.6;
+        centres.forEach((c) => {
+            const x = xs1 - (c - xf);
+            slits.push([[x - len / 2, y2], [x + len / 2, y2]]);
+        });
+    } else {
+        panels.push({ id: 'bottom', name: 'Bottom', slot: 'bottom', poly: rect(xf, y2, pw, pd) });
+        if (bottom === 'glue') {
+            panels.push({ id: 'glueBottom', name: 'Glue flap', glue: true, poly: [[xf, yb], [xf + 4, yb + glueDepth], [xs2 - 4, yb + glueDepth], [xs2, yb]] });
+        } else {
+            panels.push({ id: 'tuckBottom', name: 'Tuck flap', poly: tuckFlap(xf, xs2, yb, tuck, 1) });
+            slits.push(...tuckLockSlits(xf, xs2, yb, pd));
+        }
+    }
+
     if (seam === 'glue') {
         panels.unshift({ id: 'glue', name: 'Glue flap', glue: true, poly: [[0, y1 + 4], [g, y1], [g, y2], [0, y2 - 4]] });
-        return [finishPiece('Tuck box', panels)];
+        return [finishPiece('Tuck box', panels, slits)];
     }
     if (seam === 'corner') {
         // The flap lies inside the last side. That side's arrow tabs fold 90°
@@ -217,12 +249,20 @@ function classicTuck(cfg, { seam = 'glue' } = {}) {
         side2.poly = [[xs2, y1], [xe, y1], ...tabs.edge, [xe, y2], [xs2, y2]];
         panels.unshift({ id: 'lockFlap', name: 'Lock flap', poly: [[0, y1 + 4], [g, y1], [g, y2], [0, y2 - 4]] });
         panels.push(...tabs.panels);
-        return [finishPiece('Tuck box', panels, slitsAt(g, centres))];
+        return [finishPiece('Tuck box', panels, slits.concat(slitsAt(g, centres)))];
     }
     // The last side's lock flap lies inside the back; its tabs fold out
     // through slits in the back panel.
     const lock = lockSeam(xe, y1, y2, xb, clamp(pd * 0.8, 8, Math.min(14, pw / 3)), t);
-    return [finishPiece('Tuck box', panels.concat(lock.panels), lock.slits)];
+    return [finishPiece('Tuck box', panels.concat(lock.panels), slits.concat(lock.slits))];
+}
+
+// Tuck lock: short slits along both ends of a tuck flap's fold (xa..xb at y).
+// Closing the box pushes the dust flaps' edges into them, which holds the
+// tuck flap in place.
+function tuckLockSlits(xa, xb, y, pd) {
+    const len = clamp(pd * 0.25, 2.5, 5);
+    return [[[xa, y], [xa + len, y]], [[xb - len, y], [xb, y]]];
 }
 
 // ---- Glueless seams and tabs ----------------------------------------------------------------
@@ -472,6 +512,8 @@ const BOX_STYLES = {
     sleeve: { label: 'Sleeve / wrap', build: sleeve, slots: ['front', 'back', 'sideL', 'sideR'] },
     tuckLock: { label: 'Tuck box, tab lock', build: (cfg) => classicTuck(cfg, { seam: 'tabs' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
     tuckHidden: { label: 'Tuck box, hidden lock', build: (cfg) => classicTuck(cfg, { seam: 'corner' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
+    tuckFixed: { label: 'Tuck box, glued bottom', build: (cfg) => classicTuck(cfg, { bottom: 'glue' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
+    tuckFixedLock: { label: 'Tuck box, fixed bottom', build: (cfg) => classicTuck(cfg, { seam: 'corner', bottom: 'corner' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
     twoPieceLock: { label: 'Two-piece box, no glue', build: twoPieceLock, slots: ['lidTop', 'lidLong', 'lidShort', 'baseFloor', 'baseLong', 'baseShort'], option: 'lidDepth' },
     sleeveLock: { label: 'Sleeve, tab lock', build: sleeveLock, slots: ['front', 'back', 'sideL', 'sideR'], option: 'sleeveHeight' },
     sleeveHidden: { label: 'Sleeve, hidden lock', build: sleeveHidden, slots: ['front', 'back', 'sideL', 'sideR'], option: 'sleeveHeight' },
