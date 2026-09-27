@@ -213,7 +213,7 @@ function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
         // Tabs on the bottom's free edge (built on a vertical edge, axes swapped).
         const centres = tabCentres(xf, xs2);
         const off = cornerSlitOffset(t);
-        const tabs = arrowTabs(yb, centres, t, off);
+        const tabs = hookTabs(yb, centres, t, off);
         const swap = ([u, v]) => [v, u];
         panels.push(
             { id: 'bottom', name: 'Bottom', slot: 'bottom', poly: [[xf, y2], [xs2, y2], [xs2, yb], ...tabs.edge.map(swap).reverse(), [xf, yb]] },
@@ -221,7 +221,7 @@ function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
             { id: 'backFlap', name: 'Lock flap', poly: dustFlap(xb, xs1, y2, Math.max(4, Math.min(pd - 1.5, 16)), 1) },
         );
         // The bottom folds across from the front, so its tabs meet the back mirrored.
-        const len = LOCK.neck + 0.6;
+        const len = LOCK.slit;
         centres.forEach((c) => {
             const x = xs1 - (c - xf);
             slits.push([[x - len / 2, y2 + off], [x + len / 2, y2 + off]]); // into the back's lock flap
@@ -241,12 +241,12 @@ function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
         return [finishPiece('Tuck box', panels, slits)];
     }
     if (seam === 'corner') {
-        // The flap lies inside the last side. That side's arrow tabs fold 90°
+        // The flap lies inside the last side. That side's hook tabs fold 90°
         // at the corner and push into slits just inside the lock flap, next to
         // the back/flap fold, so they end up inside: only the slits show.
         const centres = tabCentres(y1, y2);
         const off = cornerSlitOffset(t);
-        const tabs = arrowTabs(xe, centres, t, off);
+        const tabs = hookTabs(xe, centres, t, off);
         const side2 = panels.find((p) => p.id === 'side2');
         side2.poly = [[xs2, y1], [xe, y1], ...tabs.edge, [xe, y2], [xs2, y2]];
         panels.unshift({ id: 'lockFlap', name: 'Lock flap', poly: [[0, y1 + 4], [g, y1], [g, y2], [0, y2 - 4]] });
@@ -270,11 +270,15 @@ function tuckLockSlits(xa, xb, y, pd) {
 // ---- Glueless seams and tabs ----------------------------------------------------------------
 //
 // A lock flap hinged on a vertical edge (x = x0, y0..y1) that folds inside
-// the panel whose left edge is at x = target. Two arrow tabs on its free edge
+// the panel whose left edge is at x = target. Two hook tabs on its free edge
 // fold 90° and push out through slits in that panel; their heads are wider
 // than the slits, so they catch.
 
-const LOCK = { neck: 7, head: 10, tip: 5, headLen: 4 };
+// Hook tabs: a single barb on one side and a straight side with a chamfered
+// tip. Tilted, the straight side slides through the slit and the barb corner
+// follows; straightened, the barb catches behind the slit's end. (A two-sided
+// arrow had to squeeze its whole 10 mm head through the slit at once.)
+const LOCK = { neck: 7, barb: 1.6, headLen: 4, slit: 7.8 };
 
 // One tab for a short edge, two for a long one.
 function tabCentres(y0, y1) {
@@ -282,22 +286,24 @@ function tabCentres(y0, y1) {
     return h > 40 ? [y0 + h * 0.25, y0 + h * 0.75] : [y0 + h / 2];
 }
 
-// Arrow tabs hinged on a vertical edge at x = xg (pointing right), one per
+// Hook tabs hinged on a vertical edge at x = xg (pointing right), one per
 // centre. edge: the points to insert along that edge (top to bottom) so the
 // tab bases become folds.
-function arrowTabs(xg, centres, t, reach = 0) {
+function hookTabs(xg, centres, t, reach = 0) {
     const neckLen = t + 1.2 + reach; // through the panel, plus room to fold, plus any reach past a corner
-    const { neck, head, tip, headLen } = LOCK;
+    const { neck, barb, headLen } = LOCK;
     const edge = [];
     const panels = centres.map((c, i) => {
         edge.push([xg, c - neck / 2], [xg, c + neck / 2]);
-        const xn = xg + neckLen;
-        return {
-            id: `lockTab${i + 1}`,
-            name: 'Lock tab',
-            poly: [[xg, c - neck / 2], [xn, c - neck / 2], [xn, c - head / 2], [xn + headLen, c - tip / 2],
-                [xn + headLen, c + tip / 2], [xn, c + head / 2], [xn, c + neck / 2], [xg, c + neck / 2]],
-        };
+        const xn = xg + neckLen, xt = xn + headLen;
+        const top = c - neck / 2, bot = c + neck / 2;
+        // Barb on the top side; the leading edge slopes back in from the barb
+        // to the tip, and the straight (bottom) side has a chamfered tip.
+        let poly = [[xg, top], [xn, top], [xn, top - barb], [xt, top + 1], [xt, bot - 1.5], [xt - 1.5, bot], [xg, bot]];
+        // With two tabs the barbs point away from each other, so the seam
+        // can't slide either way along the edge.
+        if (i >= centres.length / 2) poly = poly.map(([x, y]) => [x, 2 * c - y]);
+        return { id: `lockTab${i + 1}`, name: 'Lock tab', poly };
     });
     return { edge, panels };
 }
@@ -309,7 +315,7 @@ const cornerSlitOffset = (t) => Math.max(0.5, 2 * t);
 
 // Vertical slits at x for the tabs at these centres.
 function slitsAt(x, centres) {
-    const len = LOCK.neck + 0.6;
+    const len = LOCK.slit;
     return centres.map((c) => [[x, c - len / 2], [x, c + len / 2]]);
 }
 
@@ -317,7 +323,7 @@ function lockSeam(x0, y0, y1, target, width, t) {
     const xg = x0 + width;
     const inset = Math.min(4, (y1 - y0) / 6);
     const centres = tabCentres(y0, y1);
-    const tabs = arrowTabs(xg, centres, t);
+    const tabs = hookTabs(xg, centres, t);
     const flap = { id: 'lockFlap', name: 'Lock flap', poly: [[x0, y0], [xg, y0 + inset], ...tabs.edge, [xg, y1 - inset], [x0, y1]] };
     return { panels: [flap, ...tabs.panels], slits: slitsAt(target + width, centres) };
 }
@@ -500,7 +506,7 @@ function sleeveHidden(cfg) {
     const inset = Math.min(4, bh / 6);
     const centres = tabCentres(0, bh);
     const off = cornerSlitOffset(t);
-    const tabs = arrowTabs(x4, centres, t, off);
+    const tabs = hookTabs(x4, centres, t, off);
     const panels = [
         { id: 'lockFlap', name: 'Lock flap', poly: [[0, inset], [xb, 0], [xb, bh], [0, bh - inset]] },
         { id: 'back', name: 'Back', slot: 'back', poly: rect(xb, 0, pw, bh) },
