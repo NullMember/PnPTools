@@ -161,12 +161,16 @@ function tuckFlap(xa, xb, ya, depth, dir) {
     return pts;
 }
 
-function dustFlap(xa, xb, ya, depth, dir) {
+// straight: 'a' or 'b' makes that side (at xa or xb) square instead of
+// tapered. A dust flap next to a tuck lock needs it: its square edge and
+// corner catch in the lock slit and hold the lid shut; a taper slides out.
+function dustFlap(xa, xb, ya, depth, dir, straight = null) {
     // Tapered flap with a 1 mm gap from neighbouring panels so it never shares
     // an edge (which would turn a cut into a fold).
     const taper = Math.min(depth * 0.35, (xb - xa) / 3);
     const yt = ya + dir * depth;
-    return [[xa, ya], [xa + 1, ya + dir * 2], [xa + 1 + taper, yt], [xb - 1 - taper, yt], [xb - 1, ya + dir * 2], [xb, ya]];
+    const ta = straight === 'a' ? 0 : taper, tb = straight === 'b' ? 0 : taper;
+    return [[xa, ya], [xa + 1, ya + dir * 2], [xa + 1 + ta, yt], [xb - 1 - tb, yt], [xb - 1, ya + dir * 2], [xb, ya]];
 }
 
 // seam: 'glue' (glue flap), 'tabs' (lock flap with tabs through slits in
@@ -202,10 +206,12 @@ function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
         // the flat layout to read correctly from the front of the closed box.
         { id: 'lid', name: 'Top', slot: 'top', artRot: 180, poly: rect(xb, y1 - pd, pw, pd) },
         { id: 'tuckTop', name: 'Tuck flap', poly: tuckFlap(xb, xs1, y1 - pd, tuck, -1) },
-        { id: 'dust1', name: 'Dust flap', poly: dustFlap(xs1, xf, y1, dust, -1) },
-        { id: 'dust2', name: 'Dust flap', poly: dustFlap(xs2, xe, y1, dust, -1) },
-        { id: 'dust3', name: 'Dust flap', poly: dustFlap(xs1, xf, y2, dust, 1) },
-        { id: 'dust4', name: 'Dust flap', poly: dustFlap(xs2, xe, y2, dust, 1) },
+        // Square where the dust flaps meet the tuck locks: at the top the lid's
+        // tuck goes in along the front, at the bottom along the back.
+        { id: 'dust1', name: 'Dust flap', poly: dustFlap(xs1, xf, y1, dust, -1, 'b') },
+        { id: 'dust2', name: 'Dust flap', poly: dustFlap(xs2, xe, y1, dust, -1, 'a') },
+        { id: 'dust3', name: 'Dust flap', poly: dustFlap(xs1, xf, y2, dust, 1, bottom === 'tuck' ? 'a' : null) },
+        { id: 'dust4', name: 'Dust flap', poly: dustFlap(xs2, xe, y2, dust, 1, bottom === 'tuck' ? 'b' : null) },
     ];
     const slits = tuckLockSlits(xb, xs1, y1 - pd, pd);
 
