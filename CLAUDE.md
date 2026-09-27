@@ -21,7 +21,7 @@ Each tool is also deployed standalone on its own Pages site:
 | `PnPLayout` | Pack odd-shaped pieces onto sheets | `index.html`, `js/app.js`, `packer.js` run in the `pack-worker.js` Web Worker |
 | `PnPBooklet` | Tile pages / impose saddle-stitch booklets | `index.html`, `js/main.js` + modules |
 | `PnPCut` | Cutting-machine grids, line-art editor, sheet assembler | `index.html`, `editor.html`, `sheet.html` |
-| `PnPTuckBox` | Tuck boxes, two-piece boxes, sleeves; print PDF + cut/score SVG | `index.html`, `js/app.js`, `geometry.js`, `render.js` |
+| `PnPTuckBox` | Tuck boxes, two-piece boxes, sleeves; print PDF + cut/score SVG | `index.html`, `js/app.js`, `geometry.js`, `render.js`, `art-editor.js` (per-panel crop / zoom / pan dialog) |
 
 Hub-level files: `index.html` (landing page), `css/style.css`, `shared/`,
 `scripts/sync-shared.sh`, `sw.js`, `manifest.webmanifest`.
