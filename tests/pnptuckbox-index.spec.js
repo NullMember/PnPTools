@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
 
 test('the glueless styles are offered under "No glue"', async ({ page }) => {
   const labels = await page.locator('#boxStyle optgroup[label="No glue"] option').allTextContents();
-  expect(labels).toEqual(['Tuck box, tab lock', 'Tuck box, hidden lock', 'Two-piece box, folded walls', 'Sleeve, tab lock']);
+  expect(labels).toEqual(['Tuck box, tab lock', 'Tuck box, hidden lock', 'Two-piece box, folded walls', 'Sleeve, tab lock', 'Sleeve, hidden lock']);
 });
 
 // [style, pieces, slits, folds, option field shown]
@@ -26,6 +26,7 @@ const GLUELESS = [
   ['tuckHidden', 1, 2, 16, null], // the back/flap fold is split around its 2 slits
   ['twoPieceLock', 2, 16, 24, '#lidDepthGroup'],
   ['sleeveLock', 1, 2, 6, '#sleeveHeightGroup'],
+  ['sleeveHidden', 1, 2, 8, '#sleeveHeightGroup'], // flap fold split around 2 slits
 ];
 
 for (const [style, pieces, slits, folds, option] of GLUELESS) {
@@ -67,8 +68,8 @@ test('a thick deck still gives a two-piece box without glue that fits A4', async
   expect(zip.name).toBe('twoPieceLock-box-cut.zip');
 });
 
-test('hidden lock: the slits sit on the back/flap fold, which is not scored over them', async ({ page }) => {
-  await page.selectOption('#boxStyle', 'tuckHidden');
+for (const style of ['tuckHidden', 'sleeveHidden']) test(`${style}: the slits sit on the back/flap fold, which is not scored over them`, async ({ page }) => {
+  await page.selectOption('#boxStyle', style);
   await expect(page.locator('#styleHint')).toContainText('no tabs show');
   const svg = (await download(page, () => page.click('#downloadSvg'))).text();
   const pts = (d) => [...d.matchAll(/[ML]([\d.-]+) ([\d.-]+)/g)].map((m) => [+m[1], +m[2]]);
