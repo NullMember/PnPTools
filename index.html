@@ -97,7 +97,7 @@
                 </div>
 
                 <div class="panel">
-                    <div class="panel-title">Fit <span class="help" tabindex="0" data-tip="Clearance is the extra room around the deck so it slides in and out easily. Paper thickness is the cardstock you print on; it's added at every fold.">?</span></div>
+                    <div class="panel-title">Fit <span class="help" tabindex="0" data-tip="Clearance is the extra room around the deck so it slides in and out easily. Paper thickness is the cardstock you print on; it's added at every fold. Tab lip (tab-lock styles): how far each hook tab's barb sits from the side's edge, in paper thicknesses. Lower it if the tabs sit loose once locked; raise it if they are hard to push in.">?</span></div>
                     <div class="row">
                         <div class="control-group">
                             <label for="clearance">Clearance (mm)</label>
@@ -107,6 +107,11 @@
                             <label for="paperThickness">Paper thickness (mm)</label>
                             <input type="number" id="paperThickness" value="0.3" min="0" max="2" step="0.05" data-unit="mm">
                         </div>
+                    </div>
+                    <div class="control-group" id="tabLipGroup">
+                        <label for="tabLip">Tab lip (× paper thickness)</label>
+                        <input type="number" id="tabLip" value="3" min="1" max="10" step="0.5">
+                        <div class="input-hint" id="tabLipHint"></div>
                     </div>
                 </div>
 

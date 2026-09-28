@@ -56,6 +56,7 @@ function readConfig() {
         paper: num('paperThickness', 0.3),
         lidDepth: Math.min(100, Math.max(20, num('lidDepth', 100))),
         sleeveHeight: Math.min(100, Math.max(15, num('sleeveHeight', 60))),
+        tabLip: Math.min(10, Math.max(1, num('tabLip', 3))),
     };
 }
 
@@ -370,6 +371,10 @@ function updateStyleUI() {
     $('styleHint').textContent = STYLE_HINTS[style];
     $('lidDepthGroup').hidden = BOX_STYLES[style].option !== 'lidDepth';
     $('sleeveHeightGroup').hidden = BOX_STYLES[style].option !== 'sleeveHeight';
+    $('tabLipGroup').hidden = !BOX_STYLES[style].tabs;
+    if (BOX_STYLES[style].tabs) {
+        $('tabLipHint').textContent = `The barb sits ${PnP.units.format(lockLip(readConfig()))} from the side. Lower it if the tabs sit loose, raise it if they are hard to push in.`;
+    }
 }
 
 function render() {

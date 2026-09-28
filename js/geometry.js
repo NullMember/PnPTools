@@ -218,7 +218,7 @@ function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
         // Tabs on the bottom's free edge (built on a vertical edge, axes swapped).
         const centres = tabCentres(xf, xs2);
         const off = cornerSlitOffset(t);
-        const tabs = hookTabs(yb, centres, t, off);
+        const tabs = hookTabs(yb, centres, lockLip(cfg));
         const swap = ([u, v]) => [v, u];
         panels.push(
             { id: 'bottom', name: 'Bottom', slot: 'bottom', poly: [[xf, y2], [xs2, y2], [xs2, yb], ...tabs.edge.map(swap).reverse(), [xf, yb]] },
@@ -250,7 +250,7 @@ function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
     // to the back/flap fold, so they end up inside: only the slits show.
     const centres = tabCentres(y1, y2);
     const off = cornerSlitOffset(t);
-    const tabs = hookTabs(xe, centres, t, off);
+    const tabs = hookTabs(xe, centres, lockLip(cfg));
     const side2 = panels.find((p) => p.id === 'side2');
     side2.poly = [[xs2, y1], [xe, y1], ...tabs.edge, [xe, y2], [xs2, y2]];
     panels.unshift({ id: 'lockFlap', name: 'Lock flap', poly: [[0, y1 + 4], [g, y1], [g, y2], [0, y2 - 4]] });
@@ -283,13 +283,19 @@ function tabCentres(y0, y1) {
     return h > 40 ? [y0 + h * 0.25, y0 + h * 0.75] : [y0 + h / 2];
 }
 
+// How far the hook tab's barb lip sits from the side's edge (its neck):
+// Tab lip × paper thickness (cfg.tabLip, default 3), a setting because the
+// right snugness depends on the card. It never ends before the slit, which
+// sits cornerSlitOffset into the flap.
+function lockLip(cfg) {
+    const t = cfg.paper;
+    return Math.max((cfg.tabLip || 3) * t, cornerSlitOffset(t) + 0.1);
+}
+
 // Hook tabs hinged on a vertical edge at x = xg (pointing right), one per
-// centre. edge: the points to insert along that edge (top to bottom) so the
-// tab bases become folds. The neck (root to the barb's lip) reaches `reach`
-// to the slit, then across the bend and the flap (two paper thicknesses)
-// plus 0.2 mm, so the lip catches right behind the flap.
-function hookTabs(xg, centres, t, reach) {
-    const neckLen = reach + 2 * t + 0.2;
+// centre, their lips `neckLen` from the edge. edge: the points to insert
+// along that edge (top to bottom) so the tab bases become folds.
+function hookTabs(xg, centres, neckLen) {
     const { neck, barb, headLen } = LOCK;
     const edge = [];
     const panels = centres.map((c, i) => {
@@ -480,7 +486,7 @@ function sleeveLock(cfg) {
     const inset = Math.min(4, bh / 6);
     const centres = tabCentres(0, bh);
     const off = cornerSlitOffset(t);
-    const tabs = hookTabs(x4, centres, t, off);
+    const tabs = hookTabs(x4, centres, lockLip(cfg));
     const panels = [
         { id: 'lockFlap', name: 'Lock flap', poly: [[0, inset], [xb, 0], [xb, bh], [0, bh - inset]] },
         { id: 'back', name: 'Back', slot: 'back', poly: rect(xb, 0, pw, bh) },
@@ -511,6 +517,8 @@ const BOX_STYLES = {
 const STYLE_ALIASES = { tuckHidden: 'tuckLock', sleeveHidden: 'sleeveLock' };
 BOX_STYLES.twoPiece.option = 'lidDepth';
 BOX_STYLES.sleeve.option = 'sleeveHeight';
+// Styles with hook tabs, which take the Tab lip setting.
+['tuckLock', 'tuckFixedLock', 'sleeveLock'].forEach((s) => { BOX_STYLES[s].tabs = true; });
 
 const SLOT_LABELS = {
     front: 'Front',
@@ -531,4 +539,4 @@ function buildBox(style, cfg) {
     return BOX_STYLES[style].build(cfg);
 }
 
-if (typeof module !== 'undefined') module.exports = { buildBox, boxDims, BOX_STYLES };
+if (typeof module !== 'undefined') module.exports = { buildBox, boxDims, lockLip, BOX_STYLES };
