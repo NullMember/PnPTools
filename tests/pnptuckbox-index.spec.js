@@ -24,18 +24,25 @@ test.beforeEach(async ({ page }) => {
 
 test('the glueless styles are offered under "No glue"', async ({ page }) => {
   const labels = await page.locator('#boxStyle optgroup[label="No glue"] option').allTextContents();
-  expect(labels).toEqual(['Tuck box, tab lock', 'Tuck box, hidden lock', 'Tuck box, fixed bottom', 'Two-piece box, folded walls', 'Sleeve, tab lock', 'Sleeve, hidden lock']);
+  expect(labels).toEqual(['Tuck box, tab lock', 'Tuck box, fixed bottom', 'Two-piece box, folded walls', 'Sleeve, tab lock']);
+});
+
+// The "hidden lock" styles became the tab locks: settings saved under the old
+// names open the new style.
+for (const [old, now] of [['tuckHidden', 'tuckLock'], ['sleeveHidden', 'sleeveLock']]) test(`a saved "${old}" style opens as ${now}`, async ({ page }) => {
+  await page.evaluate((style) => localStorage.setItem('pnp:settings:PnPTuckBox', JSON.stringify({ boxStyle: style })), old);
+  await page.reload();
+  await expect(page.locator('#boxStyle')).toHaveValue(now);
+  await expect(page.locator('#styleHint')).toHaveText(await page.evaluate((st) => STYLE_HINTS[st], now));
 });
 
 // [style, pieces, slits, folds, option field shown]
 const GLUELESS = [
   // Tuck boxes also have 2 tuck lock slits per tuck flap (top and bottom).
   ['tuckLock', 1, 6, 14, null],
-  ['tuckHidden', 1, 6, 14, null],
   ['tuckFixedLock', 1, 6, 16, null], // top tuck lock 2 + side seam 2 + bottom 2
   ['twoPieceLock', 2, 16, 24, '#lidDepthGroup'],
   ['sleeveLock', 1, 2, 6, '#sleeveHeightGroup'],
-  ['sleeveHidden', 1, 2, 6, '#sleeveHeightGroup'],
 ];
 
 for (const [style, pieces, slits, folds, option] of GLUELESS) {
@@ -105,7 +112,7 @@ for (const style of ['tuck', 'tuckFixed']) test(`${style}: tuck lock slits sit o
 
 // Corner locks: each slit sits inside its lock flap, two paper thicknesses
 // (at least 0.5 mm) from the fold, so it opens on the right side of the bend.
-for (const style of ['tuckHidden', 'tuckFixedLock', 'sleeveHidden']) test(`${style}: corner slits sit just inside the lock flap`, async ({ page }) => {
+for (const style of ['tuckLock', 'tuckFixedLock', 'sleeveLock']) test(`${style}: corner slits sit just inside the lock flap`, async ({ page }) => {
   await selectStyle(page, style);
   const check = async (paper) => page.evaluate((expected) => {
     const pieces = buildBox($('boxStyle').value, readConfig());
@@ -140,8 +147,10 @@ for (const style of ['tuckHidden', 'tuckFixedLock', 'sleeveHidden']) test(`${sty
 });
 
 // Hook tabs: one barb each, heads only a barb wider than the neck, slits a
-// little longer than the neck; paired barbs point away from each other.
-for (const style of ['tuckLock', 'tuckHidden', 'tuckFixedLock', 'sleeveLock', 'sleeveHidden']) test(`${style}: hook tabs fit their slits`, async ({ page }) => {
+// little longer than the neck; paired barbs point away from each other. The
+// barb's lip sits just past the flap: the slit's offset into the flap plus two
+// paper thicknesses plus 0.2 mm from the side's edge (1.4 mm at 0.3 mm paper).
+for (const style of ['tuckLock', 'tuckFixedLock', 'sleeveLock']) test(`${style}: hook tabs fit their slits`, async ({ page }) => {
   await selectStyle(page, style);
   const r = await page.evaluate(() => {
     const [piece] = buildBox($('boxStyle').value, readConfig());
@@ -155,7 +164,8 @@ for (const style of ['tuckLock', 'tuckHidden', 'tuckFixedLock', 'sleeveLock', 's
       const across = alongY ? tab.poly.map((q) => q[1]) : tab.poly.map((q) => q[0]);
       const head = Math.max(...across) - Math.min(...across);
       const barbBelow = Math.min(...across) < lo - 1e-6; // barb on the low side
-      return { id: tab.id, neck, head, barbBelow, centre: lo + neck / 2 };
+      const lip = Math.hypot(tab.poly[1][0] - tab.poly[0][0], tab.poly[1][1] - tab.poly[0][1]); // root to barb lip
+      return { id: tab.id, neck, head, lip, barbBelow, centre: lo + neck / 2 };
     }).concat([{ slits: piece.slits.map(([a, b]) => Math.hypot(a[0] - b[0], a[1] - b[1])) }]);
   });
   const slits = r.pop().slits.filter((len) => len > 7); // tuck lock slits are shorter
@@ -164,6 +174,7 @@ for (const style of ['tuckLock', 'tuckHidden', 'tuckFixedLock', 'sleeveLock', 's
   for (const tab of r) {
     expect(tab.neck).toBeCloseTo(7, 5);
     expect(tab.head).toBeCloseTo(7 + 1.6, 5); // one barb, not a two-sided arrowhead
+    expect(tab.lip).toBeCloseTo(0.6 + 2 * 0.3 + 0.2, 5); // 1.4 mm at the default 0.3 mm paper
   }
   // Tabs on the same edge (same kind of id) come in pairs with opposite barbs.
   const groups = {};
@@ -183,7 +194,6 @@ for (const style of ['tuckLock', 'tuckHidden', 'tuckFixedLock', 'sleeveLock', 's
 const EXPECTED_SQUARE = {
   tuck: { dust1: 'b', dust2: 'a', dust3: 'a', dust4: 'b' },
   tuckLock: { dust1: 'b', dust2: 'a', dust3: 'a', dust4: 'b' },
-  tuckHidden: { dust1: 'b', dust2: 'a', dust3: 'a', dust4: 'b' },
   tuckFixed: { dust1: 'b', dust2: 'a', dust3: '-', dust4: '-' },
   tuckFixedLock: { dust1: 'b', dust2: 'a', dust3: '-', dust4: '-' },
 };
