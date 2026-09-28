@@ -489,12 +489,15 @@ $('deckThickness').addEventListener('input', () => {
 
 // ---- Export --------------------------------------------------------------------------------
 
+// Named after the project when it has a name, otherwise after the style.
+const outputBase = () => PnP.outputName([], 'box', `${styleId()}-box`);
+
 $('downloadPdf').addEventListener('click', async () => {
     const btn = $('downloadPdf');
     btn.disabled = true;
     try {
         const bytes = await buildPdf(state.pages, paperSize(), resolvedArt(), readOptions(), (m) => setStatus(m, 'processing'));
-        PnP.downloadBlob(new Blob([bytes], { type: 'application/pdf' }), `${styleId()}-box.pdf`);
+        PnP.downloadBlob(new Blob([bytes], { type: 'application/pdf' }), `${outputBase()}.pdf`);
         setStatus('');
     } catch (err) {
         console.error(err);
@@ -512,7 +515,7 @@ $('downloadSvg').addEventListener('click', async () => {
         PnP.toast('Some lines fall inside the cutting machine’s dead margin and won’t be cut. Widen the printer margin.', 'error');
     }
     const svgs = state.pages.map((page) => buildSvg(page, paper, machineMargin));
-    const base = `${styleId()}-box-cut`;
+    const base = `${outputBase()}-cut`;
     if (svgs.length === 1) {
         PnP.downloadBlob(new Blob([svgs[0]], { type: 'image/svg+xml' }), `${base}.svg`);
     } else {
