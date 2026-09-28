@@ -75,14 +75,25 @@ test('glued styles: only the tuck flaps have lock slits', async ({ page }) => {
   }
 });
 
+// The preview redraws just after an input: wait for the summary to show the
+// new card count before checking the result.
+async function setCardCount(page, n) {
+  await page.fill('#cardCount', String(n));
+  await page.press('#cardCount', 'Tab');
+  await expect(page.locator('.summary-item', { hasText: 'Deck' }).locator('.summary-value')).toContainText(`${n} cards`);
+}
+
 test('a thick deck still gives a two-piece box without glue that fits A4', async ({ page }) => {
   await selectStyle(page, 'twoPieceLock');
-  await page.fill('#cardCount', '100');
-  await page.press('#cardCount', 'Tab');
+  await setCardCount(page, 80); // fits A4 up to 90 cards at 0.32 mm each
   await expect(page.locator('#status')).toBeHidden(); // no "larger than the printable area"
   await expect(page.locator('.summary-item', { hasText: 'Pages' }).locator('.summary-value')).toHaveText('2');
   const zip = await download(page, () => page.click('#downloadSvg')); // one SVG per page
   expect(zip.name).toBe('twoPieceLock-box-cut.zip');
+
+  // Past that the lid is wider than A4's printable area, and the page says so.
+  await setCardCount(page, 100);
+  await expect(page.locator('#status')).toContainText('larger than the printable area');
 });
 
 // Tuck lock slits are cut along the tuck flap's fold; the fold must run up
@@ -148,8 +159,8 @@ for (const style of ['tuckLock', 'tuckFixedLock', 'sleeveLock']) test(`${style}:
 
 // Hook tabs: one barb each, heads only a barb wider than the neck, slits a
 // little longer than the neck; paired barbs point away from each other. The
-// barb's lip sits just past the flap: the slit's offset into the flap plus two
-// paper thicknesses plus 0.2 mm from the side's edge (1.4 mm at 0.3 mm paper).
+// barb's lip sits Tab lip × paper thickness from the side's edge (3 × 0.3 mm
+// by default).
 for (const style of ['tuckLock', 'tuckFixedLock', 'sleeveLock']) test(`${style}: hook tabs fit their slits`, async ({ page }) => {
   await selectStyle(page, style);
   const r = await page.evaluate(() => {
@@ -174,7 +185,7 @@ for (const style of ['tuckLock', 'tuckFixedLock', 'sleeveLock']) test(`${style}:
   for (const tab of r) {
     expect(tab.neck).toBeCloseTo(7, 5);
     expect(tab.head).toBeCloseTo(7 + 1.6, 5); // one barb, not a two-sided arrowhead
-    expect(tab.lip).toBeCloseTo(0.6 + 2 * 0.3 + 0.2, 5); // 1.4 mm at the default 0.3 mm paper
+    expect(tab.lip).toBeCloseTo(3 * 0.3, 5); // 0.9 mm by default
   }
   // Tabs on the same edge (same kind of id) come in pairs with opposite barbs.
   const groups = {};
@@ -184,6 +195,31 @@ for (const style of ['tuckLock', 'tuckFixedLock', 'sleeveLock']) test(`${style}:
     expect(first.barbBelow).toBe(true);   // the lower tab's barb points down (outwards)…
     expect(second.barbBelow).toBe(false); // …the upper one's up
   });
+});
+
+// Tab lip: shown only for styles with hook tabs; it sets the barb's distance
+// from the side in paper thicknesses, but never lets it end before the slit.
+test('Tab lip sets how far the barb sits from the side', async ({ page }) => {
+  const lips = () => page.evaluate(() => buildBox(styleId(), readConfig())[0].panels
+    .filter((p) => /Tab\d/.test(p.id))
+    .map((p) => Math.hypot(p.poly[1][0] - p.poly[0][0], p.poly[1][1] - p.poly[0][1])));
+
+  await selectStyle(page, 'tuck');
+  await expect(page.locator('#tabLipGroup')).toBeHidden();
+  await selectStyle(page, 'tuckLock');
+  await expect(page.locator('#tabLipGroup')).toBeVisible();
+  await expect(page.locator('#tabLipHint')).toContainText('0.9 mm from the side');
+  for (const lip of await lips()) expect(lip).toBeCloseTo(0.9, 5);
+
+  await page.fill('#tabLip', '4');
+  await page.press('#tabLip', 'Tab');
+  await expect(page.locator('#tabLipHint')).toContainText('1.2 mm from the side');
+  for (const lip of await lips()) expect(lip).toBeCloseTo(1.2, 5);
+
+  // Too small to reach past the slit (0.6 mm into the flap): held just past it.
+  await page.fill('#tabLip', '1');
+  await page.press('#tabLip', 'Tab');
+  for (const lip of await lips()) expect(lip).toBeCloseTo(0.7, 5);
 });
 
 // Dust flaps are square (not tapered) on the side that meets a tuck lock, so
