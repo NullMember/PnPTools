@@ -53,7 +53,7 @@ function readConfig() {
         cardH: num('cardH', 88),
         thickness: Math.max(0.5, num('cardCount', 1) * num('cardThickness', 0.32)),
         clearance: num('clearance', 1),
-        paper: num('paperThickness', 0.3),
+        paper: sheetThickness(),
         lidDepth: Math.min(100, Math.max(20, num('lidDepth', 100))),
         sleeveHeight: Math.min(100, Math.max(15, num('sleeveHeight', 60))),
         tabLip: Math.min(10, Math.max(1, num('tabLip', 3))),
@@ -447,6 +447,47 @@ function attachDrop(canvas, page, k) {
     });
 }
 
+// ---- Paper: thickness, weight and lamination -------------------------------------------
+
+// GSM to thickness is an estimate: cardstock is roughly 1 g/cm³, so 300 GSM
+// is about 0.3 mm (coated card is a little denser, uncoated a little less).
+const GSM_PER_MM = 1000;
+
+// What the box folds: the paper plus any laminating film.
+function sheetThickness() {
+    const film = $('laminated').checked ? num('laminateThickness', 0.08) * num('laminateSides', 2) : 0;
+    return num('paperThickness', 0.3) + film;
+}
+
+function syncGsm() {
+    $('paperGsm').value = Math.round(num('paperThickness', 0.3) * GSM_PER_MM);
+}
+
+function updatePaperUI() {
+    $('laminateGroup').hidden = !$('laminated').checked;
+    $('paperHint').textContent = $('laminated').checked
+        ? `Laminated sheet: ${PnP.units.format(sheetThickness())} thick.`
+        : '';
+}
+
+// Each field follows the other; typing GSM mustn't round-trip into itself.
+let typingGsm = false;
+$('paperGsm').addEventListener('input', () => {
+    const gsm = num('paperGsm');
+    if (!(gsm > 0)) return;
+    typingGsm = true;
+    $('paperThickness').value = +(gsm / GSM_PER_MM).toFixed(3);
+    $('paperThickness').dispatchEvent(new Event('input', { bubbles: true }));
+    $('paperThickness').dispatchEvent(new Event('change', { bubbles: true }));
+    typingGsm = false;
+});
+['input', 'change'].forEach((type) => $('paperThickness').addEventListener(type, () => { if (!typingGsm) syncGsm(); }));
+['laminated', 'laminateThickness', 'laminateSides', 'paperThickness'].forEach((id) => {
+    $(id).addEventListener('input', updatePaperUI);
+    $(id).addEventListener('change', updatePaperUI);
+});
+PnP.units.onChange(updatePaperUI);
+
 // ---- Card thickness preset ---------------------------------------------------------------
 
 function syncThicknessPreset() {
@@ -536,7 +577,7 @@ PnP.units.onChange(schedule);
 PnP.bindPreset($('cardPreset'), $('cardW'), $('cardH'), 'card');
 PnP.bindPreset($('paperPreset'), $('paperW'), $('paperH'), 'paper');
 PnP.bindMachinePreset($('machinePreset'), $('machineMargin'));
-PnP.settings.onApply(() => { normalizeStyle(); syncThicknessPreset(); syncDeckThickness(); renderSlots(); });
+PnP.settings.onApply(() => { normalizeStyle(); syncThicknessPreset(); syncDeckThickness(); syncGsm(); updatePaperUI(); renderSlots(); });
 
 // Images from other tools fill the empty slots of the current style in order.
 PnP.dropzone($('artDrop'), {
@@ -592,5 +633,7 @@ PnP.handoff.receive((items) => importImages(PnP.itemsToFiles(items)));
 
 syncThicknessPreset();
 syncDeckThickness();
+syncGsm();
+updatePaperUI();
 renderSlots();
 render();

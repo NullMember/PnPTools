@@ -460,3 +460,8 @@
         border-top: 1px solid var(--border);
     }
 }
+
+/* .row sets display, which would override the hidden attribute */
+.row[hidden] {
+    display: none;
+}

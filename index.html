@@ -97,17 +97,38 @@
                 </div>
 
                 <div class="panel">
-                    <div class="panel-title">Fit <span class="help" tabindex="0" data-tip="Clearance is the extra room around the deck so it slides in and out easily. Paper thickness is the cardstock you print on; it's added at every fold. Tab lip (tab-lock styles): how far each hook tab's barb sits from the side's edge, in paper thicknesses. Lower it if the tabs sit loose once locked; raise it if they are hard to push in.">?</span></div>
+                    <div class="panel-title">Fit <span class="help" tabindex="0" data-tip="Clearance is the extra room around the deck so it slides in and out easily. Paper thickness is the cardstock you print on; it's added at every fold. Type it, or the paper's weight in GSM (grams per m²) to estimate it: about 1 mm per 1000 GSM, a little thinner for coated card and thicker for uncoated, so measure with calipers for the best fit. Laminated: film on one or both sides adds its thickness to the paper's. Tab lip (tab-lock styles): how far each hook tab's barb sits from the side's edge, in paper thicknesses. Lower it if the tabs sit loose once locked; raise it if they are hard to push in.">?</span></div>
+                    <div class="control-group">
+                        <label for="clearance">Clearance (mm)</label>
+                        <input type="number" id="clearance" value="1" min="0" max="10" step="0.1" data-unit="mm">
+                    </div>
                     <div class="row">
                         <div class="control-group">
-                            <label for="clearance">Clearance (mm)</label>
-                            <input type="number" id="clearance" value="1" min="0" max="10" step="0.1" data-unit="mm">
+                            <label for="paperThickness">Paper thickness (mm)</label>
+                            <input type="number" id="paperThickness" value="0.3" min="0" max="2" step="0.01" data-unit="mm">
                         </div>
                         <div class="control-group">
-                            <label for="paperThickness">Paper thickness (mm)</label>
-                            <input type="number" id="paperThickness" value="0.3" min="0" max="2" step="0.05" data-unit="mm">
+                            <label for="paperGsm">Paper weight (GSM)</label>
+                            <input type="number" id="paperGsm" value="300" min="0" max="2000" step="10" data-persist="false">
                         </div>
                     </div>
+                    <div class="control-group">
+                        <label class="inline"><input type="checkbox" id="laminated"> Laminated</label>
+                    </div>
+                    <div class="row" id="laminateGroup">
+                        <div class="control-group">
+                            <label for="laminateThickness">Film per side (mm)</label>
+                            <input type="number" id="laminateThickness" value="0.08" min="0" max="1" step="0.005" data-unit="mm">
+                        </div>
+                        <div class="control-group">
+                            <label for="laminateSides">Sides</label>
+                            <select id="laminateSides">
+                                <option value="2">Both</option>
+                                <option value="1">One</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="input-hint" id="paperHint"></div>
                     <div class="control-group" id="tabLipGroup">
                         <label for="tabLip">Tab lip (× paper thickness)</label>
                         <input type="number" id="tabLip" value="3" min="1" max="10" step="0.5">
