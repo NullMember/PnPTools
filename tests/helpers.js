@@ -1,5 +1,7 @@
 // Shared test helpers. `test` fails any test whose page throws or logs a
 // console error; import { test, expect } from here instead of @playwright/test.
+// Its pages have no File System Access pickers (a native dialog would hang
+// the test), so project Save downloads; `fakeFilePickers` puts fakes back.
 const fs = require('node:fs');
 const base = require('@playwright/test');
 
@@ -9,6 +11,10 @@ const test = base.test.extend({
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
     page.on('dialog', (d) => d.accept());
+    await page.addInitScript(() => {
+      delete window.showSaveFilePicker;
+      delete window.showOpenFilePicker;
+    });
     await use(page);
     base.expect(errors, 'page errors').toEqual([]);
   },
@@ -81,6 +87,37 @@ async function trackRevokedUrls(page) {
 }
 const revokedUrls = (page) => page.evaluate(() => window.__revoked);
 
+// Call before page.goto: File System Access pickers that answer without a
+// dialog. Save pickers return a handle named like the suggested name (or
+// the next of `window.__pickNames`); written files land in `window.__fs`
+// (name -> Blob). `window.__openFile` (a File) is what the open picker gives.
+// `window.__pickerCalls` counts the pickers shown.
+async function fakeFilePickers(page) {
+  await page.addInitScript(() => {
+    window.__fs = {};
+    window.__pickNames = [];
+    window.__pickerCalls = 0;
+    const handle = (name) => ({
+      kind: 'file',
+      name,
+      getFile: async () => new File([window.__fs[name] || window.__openFile], name),
+      createWritable: async () => {
+        const parts = [];
+        return { write: async (b) => { parts.push(b); }, close: async () => { window.__fs[name] = new Blob(parts); } };
+      },
+    });
+    window.showSaveFilePicker = async ({ suggestedName }) => {
+      window.__pickerCalls++;
+      return handle(window.__pickNames.shift() || suggestedName);
+    };
+    window.showOpenFilePicker = async () => {
+      window.__pickerCalls++;
+      window.__fs[window.__openFile.name] = window.__openFile;
+      return [handle(window.__openFile.name)];
+    };
+  });
+}
+
 const jsonFile = (name, data) => ({ name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data)) });
 
-module.exports = { test, expect: base.expect, download, makeCardImages, dropFiles, jsonFile, expectSvgSizeInInches, trackRevokedUrls, revokedUrls };
+module.exports = { test, fakeFilePickers, expect: base.expect, download, makeCardImages, dropFiles, jsonFile, expectSvgSizeInInches, trackRevokedUrls, revokedUrls };

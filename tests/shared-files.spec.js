@@ -11,11 +11,12 @@ async function openFiles(page) {
   await expect(popover(page)).toBeVisible();
 }
 
-test('the card editor has New, Open and Save in the top bar', async ({ page }) => {
+test('the card editor has a project name, New, Open, Save and Save as in the top bar', async ({ page }) => {
   await page.goto('PnPCut/editor.html');
-  for (const name of ['New', 'Open', 'Save']) {
+  for (const name of ['New', 'Open', 'Save', 'Save as']) {
     await expect(topBar(page).getByRole('button', { name, exact: true })).toBeVisible();
   }
+  await expect(topBar(page).getByRole('textbox', { name: 'Project name' })).toBeVisible();
 });
 
 test('every tool with projects has a New button', async ({ page }) => {
@@ -68,7 +69,7 @@ test('New starts an empty project, after confirming unsaved work', async ({ page
   await expect(page.locator('#canvasSvg .shape-el')).toHaveCount(0);
 });
 
-test('New clears this page\'s Inputs & outputs, not other tools\'', async ({ page }) => {
+test('New clears Inputs & outputs', async ({ page }) => {
   await page.goto('PnPBleed/index.html');
   const img = await makeCardImages(page);
   await page.setInputFiles('#imageInput', [img.alpha]);
@@ -90,9 +91,8 @@ test('New clears this page\'s Inputs & outputs, not other tools\'', async ({ pag
     topBar(page).getByRole('button', { name: 'New', exact: true }).click(),
   ]);
   await openFiles(page);
-  const rows = popover(page).locator('.pnp-popover-row');
-  await expect(rows).toHaveCount(1);
-  await expect(rows).toContainText('loaded in Bleed');
+  await expect(popover(page).locator('.pnp-popover-row')).toHaveCount(0);
+  await expect(popover(page).locator('.pnp-popover-empty')).toBeVisible();
 });
 
 test('files dropped into a tool are listed as its inputs', async ({ page }) => {
@@ -218,4 +218,90 @@ test('Layout and TuckBox cut files are sized in inches', async ({ page }) => {
   await expect(page.locator('#sheetGrid > *').first()).toBeVisible({ timeout: 15000 }); // packed
   const layout = await download(page, () => page.click('#downloadSvg'));
   expectSvgSizeInInches(layout.text());
+});
+
+// ---- project name, Save, Save as ----
+
+test('Save names the project file after the project name, and Open restores it', async ({ page }) => {
+  await page.goto('PnPTuckBox/index.html');
+  await page.fill('.pnp-project-name', 'Dragon deck');
+  const saved = await download(page, () => topBar(page).getByRole('button', { name: 'Save', exact: true }).click());
+  expect(saved.name).toBe('Dragon deck.pnp');
+  // No File System Access: Save as downloads a copy too.
+  const copy = await download(page, () => topBar(page).getByRole('button', { name: 'Save as', exact: true }).click());
+  expect(copy.name).toBe('Dragon deck.pnp');
+
+  await page.goto('PnPTuckBox/index.html');
+  await expect(page.locator('.pnp-project-name')).toHaveValue('');
+  await page.evaluate(async (bytes) => {
+    await PnP.project.load(new File([new Uint8Array(bytes)], 'Dragon deck (1).pnp'));
+  }, [...require('node:fs').readFileSync(saved.path)]);
+  await expect(page.locator('.pnp-project-name')).toHaveValue('Dragon deck');
+});
+
+test('Ctrl+S saves the project', async ({ page }) => {
+  await page.goto('PnPCut/sheet.html');
+  await page.fill('.pnp-project-name', 'Sheet one');
+  await page.locator('body').click();
+  const saved = await download(page, () => page.keyboard.press('ControlOrMeta+s'));
+  expect(saved.name).toBe('Sheet one.pnp');
+});
+
+test.describe('with the File System Access API', () => {
+  const { fakeFilePickers } = require('./helpers');
+  const save = (page) => topBar(page).getByRole('button', { name: 'Save', exact: true }).click();
+  const saveAs = (page) => topBar(page).getByRole('button', { name: 'Save as', exact: true }).click();
+  const state = (page) => page.evaluate(() => ({ calls: window.__pickerCalls, files: Object.keys(window.__fs) }));
+
+  test.beforeEach(async ({ page }) => {
+    await fakeFilePickers(page);
+    await page.goto('PnPTuckBox/index.html');
+  });
+
+  test('Save asks once, then saves to the same file', async ({ page }) => {
+    await page.fill('.pnp-project-name', 'Box');
+    await save(page);
+    await expect(page.locator('.pnp-toast')).toContainText('Saved Box.pnp');
+    expect(await state(page)).toEqual({ calls: 1, files: ['Box.pnp'] });
+
+    await page.fill('#cardCount', '20');
+    await save(page);
+    await expect.poll(() => page.evaluate(async () => {
+      const entries = await PnP.zip.read(window.__fs['Box.pnp']);
+      return JSON.parse(new TextDecoder().decode(entries.get('manifest.json'))).settings.cardCount;
+    })).toBe('20');
+    expect((await state(page)).calls).toBe(1); // no second dialog
+  });
+
+  test('Save as picks a new file and the name follows it', async ({ page }) => {
+    await page.fill('.pnp-project-name', 'Box');
+    await save(page);
+    await page.evaluate(() => window.__pickNames.push('Box copy.pnp'));
+    await saveAs(page);
+    await expect(page.locator('.pnp-project-name')).toHaveValue('Box copy');
+    expect(await state(page)).toEqual({ calls: 2, files: ['Box.pnp', 'Box copy.pnp'] });
+    await save(page); // now saves to the copy
+    await expect.poll(() => state(page)).toEqual({ calls: 2, files: ['Box.pnp', 'Box copy.pnp'] });
+  });
+
+  test('renaming the project asks where to save it', async ({ page }) => {
+    await page.fill('.pnp-project-name', 'Box');
+    await save(page);
+    await page.fill('.pnp-project-name', 'Renamed');
+    await save(page);
+    await expect.poll(() => state(page)).toEqual({ calls: 2, files: ['Box.pnp', 'Renamed.pnp'] });
+  });
+
+  test('a project opened from a file saves back to it', async ({ page }) => {
+    await page.fill('.pnp-project-name', 'Mine');
+    await save(page);
+    const bytes = await page.evaluate(async () => [...new Uint8Array(await window.__fs['Mine.pnp'].arrayBuffer())]);
+    await page.goto('PnPTuckBox/index.html'); // later, in a fresh page
+    await page.evaluate((b) => { window.__openFile = new File([new Uint8Array(b)], 'Mine.pnp'); }, bytes);
+    await topBar(page).getByRole('button', { name: 'Open', exact: true }).click();
+    await expect(page.locator('.pnp-project-name')).toHaveValue('Mine');
+    await save(page);
+    await expect(page.locator('.pnp-toast').last()).toContainText('Saved Mine.pnp');
+    expect(await state(page)).toEqual({ calls: 1, files: ['Mine.pnp'] }); // only the open dialog
+  });
 });
