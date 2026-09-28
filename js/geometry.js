@@ -173,19 +173,18 @@ function dustFlap(xa, xb, ya, depth, dir, straight = null) {
     return [[xa, ya], [xa + 1, ya + dir * 2], [xa + 1 + ta, yt], [xb - 1 - tb, yt], [xb - 1, ya + dir * 2], [xb, ya]];
 }
 
-// seam: 'glue' (glue flap), 'tabs' (lock flap with tabs through slits in
-// the back) or 'corner' (hidden: the flap on the back lies inside the last
-// side, and that side's tabs fold into slits just inside it, by the corner).
+// seam: 'glue' (glue flap) or 'corner' (tab lock: the flap on the back lies
+// inside the last side, and that side's tabs fold into slits just inside it,
+// by the corner, so no tab shows).
 // bottom: 'tuck' (opens like the top), 'glue' (a glue flap instead of the
-// tuck flap) or 'corner' (hidden lock: the bottom's tabs fold into slits in
-// an inner flap on the back's bottom edge, just past its fold).
+// tuck flap) or 'corner' (tab lock: the bottom's tabs fold into slits in an
+// inner flap on the back's bottom edge, just past its fold).
 // Every tuck flap gets lock slits at both ends of its fold, which the dust
 // flaps catch in when the box is closed.
 function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
     const { pw, ph, pd, t } = boxDims(cfg);
-    const g = seam === 'tabs' ? 0                              // lock flap sits on the right instead
-        : seam === 'corner' ? Math.max(4, Math.min(pd - 1.5, 16)) // as wide as fits inside the side
-            : clamp(pd * 0.8, 8, 12);
+    const g = seam === 'corner' ? Math.max(4, Math.min(pd - 1.5, 16)) // as wide as fits inside the side
+        : clamp(pd * 0.8, 8, 12);
     const tuck = clamp(pd * 0.8, 12, 22);    // tuck-in flap depth
     const dust = clamp(pd * 0.85, 6, 25);    // dust flap depth
     const notchR = Math.min(pw * 0.18, 12);  // thumb notch radius
@@ -246,23 +245,17 @@ function classicTuck(cfg, { seam = 'glue', bottom = 'tuck' } = {}) {
         panels.unshift({ id: 'glue', name: 'Glue flap', glue: true, poly: [[0, y1 + 4], [g, y1], [g, y2], [0, y2 - 4]] });
         return [finishPiece('Tuck box', panels, slits)];
     }
-    if (seam === 'corner') {
-        // The flap lies inside the last side. That side's hook tabs fold 90°
-        // at the corner and push into slits just inside the lock flap, next to
-        // the back/flap fold, so they end up inside: only the slits show.
-        const centres = tabCentres(y1, y2);
-        const off = cornerSlitOffset(t);
-        const tabs = hookTabs(xe, centres, t, off);
-        const side2 = panels.find((p) => p.id === 'side2');
-        side2.poly = [[xs2, y1], [xe, y1], ...tabs.edge, [xe, y2], [xs2, y2]];
-        panels.unshift({ id: 'lockFlap', name: 'Lock flap', poly: [[0, y1 + 4], [g, y1], [g, y2], [0, y2 - 4]] });
-        panels.push(...tabs.panels);
-        return [finishPiece('Tuck box', panels, slits.concat(slitsAt(g - off, centres)))]; // into the lock flap
-    }
-    // The last side's lock flap lies inside the back; its tabs fold out
-    // through slits in the back panel.
-    const lock = lockSeam(xe, y1, y2, xb, clamp(pd * 0.8, 8, Math.min(14, pw / 3)), t);
-    return [finishPiece('Tuck box', panels.concat(lock.panels), slits.concat(lock.slits))];
+    // Tab lock: the flap lies inside the last side. That side's hook tabs fold
+    // 90° at the corner and push into slits just inside the lock flap, next
+    // to the back/flap fold, so they end up inside: only the slits show.
+    const centres = tabCentres(y1, y2);
+    const off = cornerSlitOffset(t);
+    const tabs = hookTabs(xe, centres, t, off);
+    const side2 = panels.find((p) => p.id === 'side2');
+    side2.poly = [[xs2, y1], [xe, y1], ...tabs.edge, [xe, y2], [xs2, y2]];
+    panels.unshift({ id: 'lockFlap', name: 'Lock flap', poly: [[0, y1 + 4], [g, y1], [g, y2], [0, y2 - 4]] });
+    panels.push(...tabs.panels);
+    return [finishPiece('Tuck box', panels, slits.concat(slitsAt(g - off, centres)))]; // into the lock flap
 }
 
 // Tuck lock: short slits along both ends of a tuck flap's fold (xa..xb at y).
@@ -273,12 +266,10 @@ function tuckLockSlits(xa, xb, y, pd) {
     return [[[xa, y], [xa + len, y]], [[xb - len, y], [xb, y]]];
 }
 
-// ---- Glueless seams and tabs ----------------------------------------------------------------
+// ---- Glueless tab locks ---------------------------------------------------------------------
 //
-// A lock flap hinged on a vertical edge (x = x0, y0..y1) that folds inside
-// the panel whose left edge is at x = target. Two hook tabs on its free edge
-// fold 90° and push out through slits in that panel; their heads are wider
-// than the slits, so they catch.
+// A lock flap on the back folds inside along the neighbouring panel; that
+// panel's hook tabs fold 90° at the corner into slits just inside the flap.
 
 // Hook tabs: a single barb on one side and a straight side with a chamfered
 // tip. Tilted, the straight side slides through the slit and the barb corner
@@ -294,9 +285,11 @@ function tabCentres(y0, y1) {
 
 // Hook tabs hinged on a vertical edge at x = xg (pointing right), one per
 // centre. edge: the points to insert along that edge (top to bottom) so the
-// tab bases become folds.
-function hookTabs(xg, centres, t, reach = 0) {
-    const neckLen = t + 1.2 + reach; // through the panel, plus room to fold, plus any reach past a corner
+// tab bases become folds. The neck (root to the barb's lip) reaches `reach`
+// to the slit, then across the bend and the flap (two paper thicknesses)
+// plus 0.2 mm, so the lip catches right behind the flap.
+function hookTabs(xg, centres, t, reach) {
+    const neckLen = reach + 2 * t + 0.2;
     const { neck, barb, headLen } = LOCK;
     const edge = [];
     const panels = centres.map((c, i) => {
@@ -323,15 +316,6 @@ const cornerSlitOffset = (t) => Math.max(0.5, 2 * t);
 function slitsAt(x, centres) {
     const len = LOCK.slit;
     return centres.map((c) => [[x, c - len / 2], [x, c + len / 2]]);
-}
-
-function lockSeam(x0, y0, y1, target, width, t) {
-    const xg = x0 + width;
-    const inset = Math.min(4, (y1 - y0) / 6);
-    const centres = tabCentres(y0, y1);
-    const tabs = hookTabs(xg, centres, t);
-    const flap = { id: 'lockFlap', name: 'Lock flap', poly: [[x0, y0], [xg, y0 + inset], ...tabs.edge, [xg, y1 - inset], [x0, y1]] };
-    return { panels: [flap, ...tabs.panels], slits: slitsAt(target + width, centres) };
 }
 
 // ---- Two-piece box (tray base + slightly larger lid) ---------------------------------------
@@ -485,26 +469,10 @@ function sleeve(cfg) {
     return [finishPiece('Sleeve', panels)];
 }
 
-// Glueless sleeve: back first, so the lock flap on the last side lies inside
-// the back and its tabs show there, not on the front.
+// Tab-lock sleeve, like the tab-lock tuck box: the flap on the back folds
+// inside along the last side, whose tabs fold into slits just inside the
+// flap, by the corner. Only the slits show, at that corner.
 function sleeveLock(cfg) {
-    const { pw, ph, pd, t } = boxDims(cfg);
-    const bh = ph * (cfg.sleeveHeight / 100);
-    const x1 = pw, x2 = x1 + pd, x3 = x2 + pw, x4 = x3 + pd;
-    const panels = [
-        { id: 'back', name: 'Back', slot: 'back', poly: rect(0, 0, pw, bh) },
-        { id: 'side1', name: 'Side', slot: 'sideL', poly: rect(x1, 0, pd, bh) },
-        { id: 'front', name: 'Front', slot: 'front', poly: rect(x2, 0, pw, bh) },
-        { id: 'side2', name: 'Side', slot: 'sideR', poly: rect(x3, 0, pd, bh) },
-    ];
-    const seam = lockSeam(x4, 0, bh, 0, clamp(pd * 0.8, 8, Math.min(14, pw / 3)), t);
-    return [finishPiece('Sleeve', panels.concat(seam.panels), seam.slits)];
-}
-
-// Hidden-lock sleeve, like the hidden-lock tuck box: the flap on the back
-// folds inside along the last side, whose tabs fold into slits just inside
-// the flap, by the corner. Only the slits show, at that corner.
-function sleeveHidden(cfg) {
     const { pw, ph, pd, t } = boxDims(cfg);
     const bh = ph * (cfg.sleeveHeight / 100);
     const g = Math.max(4, Math.min(pd - 1.5, 16)); // as wide as fits inside the side
@@ -530,14 +498,17 @@ const BOX_STYLES = {
     tuck: { label: 'Classic tuck box', build: classicTuck, slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
     twoPiece: { label: 'Two-piece box', build: twoPiece, slots: ['lidTop', 'lidLong', 'lidShort', 'baseFloor', 'baseLong', 'baseShort'] },
     sleeve: { label: 'Sleeve / wrap', build: sleeve, slots: ['front', 'back', 'sideL', 'sideR'] },
-    tuckLock: { label: 'Tuck box, tab lock', build: (cfg) => classicTuck(cfg, { seam: 'tabs' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
-    tuckHidden: { label: 'Tuck box, hidden lock', build: (cfg) => classicTuck(cfg, { seam: 'corner' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
+    tuckLock: { label: 'Tuck box, tab lock', build: (cfg) => classicTuck(cfg, { seam: 'corner' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
     tuckFixed: { label: 'Tuck box, glued bottom', build: (cfg) => classicTuck(cfg, { bottom: 'glue' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
     tuckFixedLock: { label: 'Tuck box, fixed bottom', build: (cfg) => classicTuck(cfg, { seam: 'corner', bottom: 'corner' }), slots: ['front', 'back', 'sideL', 'sideR', 'top', 'bottom'] },
     twoPieceLock: { label: 'Two-piece box, no glue', build: twoPieceLock, slots: ['lidTop', 'lidLong', 'lidShort', 'baseFloor', 'baseLong', 'baseShort'], option: 'lidDepth' },
     sleeveLock: { label: 'Sleeve, tab lock', build: sleeveLock, slots: ['front', 'back', 'sideL', 'sideR'], option: 'sleeveHeight' },
-    sleeveHidden: { label: 'Sleeve, hidden lock', build: sleeveHidden, slots: ['front', 'back', 'sideL', 'sideR'], option: 'sleeveHeight' },
 };
+
+// Styles that were renamed: saved settings and projects still name them.
+// (The "hidden lock" styles became the tab locks; the old through-the-back
+// tab locks were dropped.)
+const STYLE_ALIASES = { tuckHidden: 'tuckLock', sleeveHidden: 'sleeveLock' };
 BOX_STYLES.twoPiece.option = 'lidDepth';
 BOX_STYLES.sleeve.option = 'sleeveHeight';
 

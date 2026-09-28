@@ -18,13 +18,28 @@ const STYLE_HINTS = {
     tuckFixed: 'A tuck box whose bottom is glued shut: glue the side seam, then fold the bottom dust flaps in and glue the bottom’s flap inside the back. Only the lid opens.',
     twoPiece: 'A base tray and a slightly larger lid that slides over it. The deck lies flat.',
     sleeve: 'An open band that slides over the deck.',
-    tuckLock: 'No glue. Fold the tube so the lock flap lies inside the back, then fold each hook tab out and push it through its slit in the back. The ends tuck in as usual. Tilt each tab so its straight side goes in first, then straighten it: the barb locks.',
-    tuckFixedLock: 'No glue, and a bottom that stays shut. Close the side as for the hidden lock. At the bottom, fold the dust flaps in, then the flap on the back, then the bottom; fold the bottom’s hook tabs 90° up into the slits just inside the back’s flap. Only the lid opens. Tilt each tab so its straight side goes in first, then straighten it: the barb locks.',
-    tuckHidden: 'No glue, and no tabs show. Fold the flap on the back inside the box, along the last side. Then fold that side’s hook tabs 90° inward and push them into the slits just inside the flap, by the corner, so they lock inside. The ends tuck in as usual. Tilt each tab so its straight side goes in first, then straighten it: the barb locks.',
+    tuckLock: 'No glue, and no tabs show. Fold the flap on the back inside the box, along the last side. Then fold that side’s hook tabs 90° inward and push them into the slits just inside the flap, by the corner, so they lock inside. The ends tuck in as usual. Tilt each tab so its straight side goes in first, then straighten it: the barb locks.',
+    tuckFixedLock: 'No glue, and a bottom that stays shut. Close the side as for the tab lock. At the bottom, fold the dust flaps in, then the flap on the back, then the bottom; fold the bottom’s hook tabs 90° up into the slits just inside the back’s flap. Only the lid opens. Tilt each tab so its straight side goes in first, then straighten it: the barb locks.',
     twoPieceLock: 'No glue. For each tray: fold the long walls up and their inner halves down inside, turning the corner flaps in. Then fold the short walls up over the flaps and down inside. Push every tab into its slit in the floor.',
-    sleeveLock: 'No glue. Fold the band so the lock flap lies inside the back, then fold each hook tab out and push it through its slit in the back. Tilt each tab so its straight side goes in first, then straighten it: the barb locks.',
-    sleeveHidden: 'No glue, and no tabs show. Fold the flap on the back inside the band, along the last side. Then fold that side’s hook tabs 90° inward and push them into the slits just inside the flap, by the corner, so they lock inside. Tilt each tab so its straight side goes in first, then straighten it: the barb locks.',
+    sleeveLock: 'No glue, and no tabs show. Fold the flap on the back inside the band, along the last side. Then fold that side’s hook tabs 90° inward and push them into the slits just inside the flap, by the corner, so they lock inside. Tilt each tab so its straight side goes in first, then straighten it: the barb locks.',
 };
+
+// The chosen style, with an old saved name read as its new one (settings
+// apply fires change events before normalizeStyle runs).
+function styleId() {
+    const v = $('boxStyle').value;
+    return STYLE_ALIASES[v] || v;
+}
+
+// A style saved under an old name (settings, projects) switches to its new
+// one; saving the settings again keeps the new name.
+function normalizeStyle() {
+    const select = $('boxStyle');
+    const renamed = STYLE_ALIASES[select.value];
+    if (!renamed) return;
+    select.value = renamed;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+}
 
 function num(id, fallback = 0) {
     const v = parseFloat($(id).value);
@@ -33,7 +48,7 @@ function num(id, fallback = 0) {
 
 function readConfig() {
     return {
-        style: $('boxStyle').value,
+        style: styleId(),
         cardW: num('cardW', 63),
         cardH: num('cardH', 88),
         thickness: Math.max(0.5, num('cardCount', 1) * num('cardThickness', 0.32)),
@@ -97,7 +112,7 @@ async function addImages(files) {
 // stay in the library for picking later.
 async function importImages(files) {
     const added = await addImages(files);
-    const empty = BOX_STYLES[$('boxStyle').value].slots.filter((s) => !state.art[s]);
+    const empty = BOX_STYLES[styleId()].slots.filter((s) => !state.art[s]);
     added.slice(0, empty.length).forEach((im, i) => { state.art[empty[i]] = { imageId: im.id, rot: 0, mode: 'fill' }; });
     renderSlots();
     schedule();
@@ -248,7 +263,7 @@ function renderSlots() {
     renderLibrary();
     const list = $('slotList');
     list.innerHTML = '';
-    BOX_STYLES[$('boxStyle').value].slots.forEach((slot) => {
+    BOX_STYLES[styleId()].slots.forEach((slot) => {
         const a = state.art[slot];
         const im = a && imageById(a.imageId);
         const row = document.createElement('div');
@@ -351,7 +366,7 @@ function setStatus(message, type = 'info') {
 }
 
 function updateStyleUI() {
-    const style = $('boxStyle').value;
+    const style = styleId();
     $('styleHint').textContent = STYLE_HINTS[style];
     $('lidDepthGroup').hidden = BOX_STYLES[style].option !== 'lidDepth';
     $('sleeveHeightGroup').hidden = BOX_STYLES[style].option !== 'sleeveHeight';
@@ -474,7 +489,7 @@ $('downloadPdf').addEventListener('click', async () => {
     btn.disabled = true;
     try {
         const bytes = await buildPdf(state.pages, paperSize(), resolvedArt(), readOptions(), (m) => setStatus(m, 'processing'));
-        PnP.downloadBlob(new Blob([bytes], { type: 'application/pdf' }), `${$('boxStyle').value}-box.pdf`);
+        PnP.downloadBlob(new Blob([bytes], { type: 'application/pdf' }), `${styleId()}-box.pdf`);
         setStatus('');
     } catch (err) {
         console.error(err);
@@ -492,7 +507,7 @@ $('downloadSvg').addEventListener('click', async () => {
         PnP.toast('Some lines fall inside the cutting machine’s dead margin and won’t be cut. Widen the printer margin.', 'error');
     }
     const svgs = state.pages.map((page) => buildSvg(page, paper, machineMargin));
-    const base = `${$('boxStyle').value}-box-cut`;
+    const base = `${styleId()}-box-cut`;
     if (svgs.length === 1) {
         PnP.downloadBlob(new Blob([svgs[0]], { type: 'image/svg+xml' }), `${base}.svg`);
     } else {
@@ -513,7 +528,7 @@ PnP.units.onChange(schedule);
 PnP.bindPreset($('cardPreset'), $('cardW'), $('cardH'), 'card');
 PnP.bindPreset($('paperPreset'), $('paperW'), $('paperH'), 'paper');
 PnP.bindMachinePreset($('machinePreset'), $('machineMargin'));
-PnP.settings.onApply(() => { syncThicknessPreset(); syncDeckThickness(); renderSlots(); });
+PnP.settings.onApply(() => { normalizeStyle(); syncThicknessPreset(); syncDeckThickness(); renderSlots(); });
 
 // Images from other tools fill the empty slots of the current style in order.
 PnP.dropzone($('artDrop'), {
