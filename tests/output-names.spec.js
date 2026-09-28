@@ -81,10 +81,12 @@ test('Layout names the PDF after its piece, or the project', async ({ page }) =>
   await page.goto('PnPLayout/index.html');
   const img = await makeCardImages(page);
   await page.setInputFiles('#imageInput', [img.opaque]);
-  await expect(page.locator('#downloadPdf')).toBeEnabled();
+  // The packer runs in a worker: download once the sheets are laid out.
+  await expect(page.getByText('1 piece(s) on 1 sheet(s)')).toBeVisible();
   const one = await download(page, () => page.click('#downloadPdf'));
   expect(one.name).toBe('Plain_layout.pdf');
   await page.setInputFiles('#imageInput', [img.alpha]);
+  await expect(page.getByText('2 piece(s) on 1 sheet(s)')).toBeVisible();
   await setProjectName(page, 'Tokens');
   const two = await download(page, () => page.click('#downloadPdf'));
   expect(two.name).toBe('Tokens_layout.pdf');

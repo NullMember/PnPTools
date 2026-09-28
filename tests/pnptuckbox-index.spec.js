@@ -380,3 +380,34 @@ test.describe('artwork editor', () => {
     expect(a).toMatchObject({ crop: { x: 0.1, y: 0, w: 0.8, h: 1 }, zoom: 1.5, dx: 0.2, dy: -0.1 });
   });
 });
+
+test.describe('paper weight and lamination', () => {
+  test('GSM and paper thickness follow each other', async ({ page }) => {
+    await expect(page.locator('#paperGsm')).toHaveValue('300');
+    await page.fill('#paperGsm', '350');
+    await expect(page.locator('#paperThickness')).toHaveValue('0.35');
+    await expect(page.locator('#paperThickness__display')).toHaveValue('0.35');
+    await page.fill('#paperThickness__display', '0.25');
+    await page.press('#paperThickness__display', 'Tab');
+    await expect(page.locator('#paperGsm')).toHaveValue('250');
+  });
+
+  test('laminating film is added to the thickness the box folds', async ({ page }) => {
+    await selectStyle(page, 'tuckLock');
+    await expect(page.locator('#laminateGroup')).toBeHidden();
+    await expect(page.locator('#tabLipHint')).toContainText('0.9 mm from the side');
+
+    await page.check('#laminated');
+    await expect(page.locator('#laminateGroup')).toBeVisible();
+    await expect(page.locator('#paperHint')).toContainText('0.46 mm'); // 0.3 + 2 × 0.08
+    await expect(page.locator('#tabLipHint')).toContainText('1.38 mm from the side');
+    await page.selectOption('#laminateSides', '1');
+    await expect(page.locator('#paperHint')).toContainText('0.38 mm');
+
+    // Kept in settings; GSM is worked out from the paper alone.
+    await page.reload();
+    await expect(page.locator('#laminated')).toBeChecked();
+    await expect(page.locator('#paperHint')).toContainText('0.38 mm');
+    await expect(page.locator('#paperGsm')).toHaveValue('300');
+  });
+});
