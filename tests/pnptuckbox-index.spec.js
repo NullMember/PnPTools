@@ -411,3 +411,44 @@ test.describe('paper weight and lamination', () => {
     await expect(page.locator('#paperGsm')).toHaveValue('300');
   });
 });
+
+test.describe('card thickness from weight, lamination and sleeves', () => {
+  const perCard = (page) => page.locator('#cardThickness');
+
+  test('card weight and sleeves set the per-card and whole-deck thickness', async ({ page }) => {
+    await expect(page.locator('#cardGsm')).toHaveValue('320');
+    await expect(perCard(page)).toHaveValue('0.32');
+    await page.fill('#cardGsm', '350');
+    await expect(perCard(page)).toHaveValue('0.35');
+    await expect(page.locator('#deckThickness')).toHaveValue('18.9'); // 54 × 0.35
+    await page.selectOption('#cardSleeves', 'penny');
+    await expect(perCard(page)).toHaveValue('0.48'); // + 0.13
+    await expect(page.locator('#cardGsm')).toHaveValue('350'); // the card stock is kept
+  });
+
+  test('laminated cards add the film on each side', async ({ page }) => {
+    await expect(page.locator('#cardLaminateGroup')).toBeHidden();
+    await page.check('#cardLaminated');
+    await expect(page.locator('#cardLaminateGroup')).toBeVisible();
+    await expect(perCard(page)).toHaveValue('0.48'); // 0.32 + 2 × 0.08
+    await page.selectOption('#cardLaminateSides', '1');
+    await expect(perCard(page)).toHaveValue('0.4');
+    await page.fill('#cardLaminateThickness__display', '0.125');
+    await page.press('#cardLaminateThickness__display', 'Tab');
+    await expect(perCard(page)).toHaveValue('0.445');
+  });
+
+  test('measuring the deck works the card weight back out', async ({ page }) => {
+    await page.selectOption('#cardSleeves', 'premium');
+    await expect(perCard(page)).toHaveValue('0.6');
+    await page.fill('#deckThickness__display', '27');
+    await expect(perCard(page)).toHaveValue('0.5'); // 27 / 54
+    await expect(page.locator('#cardGsm')).toHaveValue('220'); // 0.5 − 0.28 sleeve
+
+    // Kept after a reload: sleeves and the per-card value, GSM worked out again.
+    await page.reload();
+    await expect(page.locator('#cardSleeves')).toHaveValue('premium');
+    await expect(perCard(page)).toHaveValue('0.5');
+    await expect(page.locator('#cardGsm')).toHaveValue('220');
+  });
+});
