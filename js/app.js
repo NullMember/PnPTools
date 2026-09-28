@@ -488,22 +488,46 @@ $('paperGsm').addEventListener('input', () => {
 });
 PnP.units.onChange(updatePaperUI);
 
-// ---- Card thickness preset ---------------------------------------------------------------
+// ---- Card thickness: weight, lamination, sleeves -------------------------------------------
 
-function syncThicknessPreset() {
-    const v = num('cardThickness');
-    const match = [...$('thicknessPreset').options].find((o) => o.value !== 'custom' && Math.abs(parseFloat(o.value) - v) < 0.001);
-    $('thicknessPreset').value = match ? match.value : 'custom';
+// What a sleeve adds to a card (both plastic layers).
+const SLEEVE_MM = { none: 0, penny: 0.13, premium: 0.28 };
+
+// Film and sleeves on one card; the rest of its thickness is the card stock.
+function cardExtras() {
+    const film = $('cardLaminated').checked ? num('cardLaminateThickness', 0.08) * num('cardLaminateSides', 2) : 0;
+    return film + (SLEEVE_MM[$('cardSleeves').value] || 0);
 }
 
-$('thicknessPreset').addEventListener('change', () => {
-    const v = $('thicknessPreset').value;
-    if (v === 'custom') return;
-    $('cardThickness').value = v;
+// The card weight that gives the per-card thickness (when it's positive).
+function syncCardGsm() {
+    const stock = num('cardThickness', 0.32) - cardExtras();
+    $('cardGsm').value = stock > 0 ? Math.round(stock * GSM_PER_MM) : '';
+}
+
+// Per card = card weight + film + sleeves; typing the per-card (or whole
+// deck) thickness works the card weight back out instead.
+let derivingCard = false;
+function updateCardThickness() {
+    const gsm = num('cardGsm');
+    if (!(gsm > 0)) return;
+    derivingCard = true;
+    $('cardThickness').value = +(gsm / GSM_PER_MM + cardExtras()).toFixed(4);
     $('cardThickness').dispatchEvent(new Event('input', { bubbles: true }));
+    $('cardThickness').dispatchEvent(new Event('change', { bubbles: true }));
+    derivingCard = false;
+}
+
+function updateCardUI() {
+    $('cardLaminateGroup').hidden = !$('cardLaminated').checked;
+}
+
+$('cardGsm').addEventListener('input', updateCardThickness);
+['cardSleeves', 'cardLaminated', 'cardLaminateThickness', 'cardLaminateSides'].forEach((id) => {
+    $(id).addEventListener('input', updateCardThickness);
+    $(id).addEventListener('change', () => { updateCardUI(); updateCardThickness(); });
 });
-$('cardThickness').addEventListener('input', syncThicknessPreset);
-$('thicknessPreset').dataset.persist = 'false';
+['input', 'change'].forEach((type) => $('cardThickness').addEventListener(type, () => { if (!derivingCard) syncCardGsm(); }));
 
 // ---- Deck thickness ------------------------------------------------------------------------
 
@@ -577,7 +601,7 @@ PnP.units.onChange(schedule);
 PnP.bindPreset($('cardPreset'), $('cardW'), $('cardH'), 'card');
 PnP.bindPreset($('paperPreset'), $('paperW'), $('paperH'), 'paper');
 PnP.bindMachinePreset($('machinePreset'), $('machineMargin'));
-PnP.settings.onApply(() => { normalizeStyle(); syncThicknessPreset(); syncDeckThickness(); syncGsm(); updatePaperUI(); renderSlots(); });
+PnP.settings.onApply(() => { normalizeStyle(); syncCardGsm(); updateCardUI(); syncDeckThickness(); syncGsm(); updatePaperUI(); renderSlots(); });
 
 // Images from other tools fill the empty slots of the current style in order.
 PnP.dropzone($('artDrop'), {
@@ -631,7 +655,8 @@ PnP.init({
 
 PnP.handoff.receive((items) => importImages(PnP.itemsToFiles(items)));
 
-syncThicknessPreset();
+syncCardGsm();
+updateCardUI();
 syncDeckThickness();
 syncGsm();
 updatePaperUI();
