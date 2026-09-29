@@ -102,7 +102,7 @@ test('files dropped into a tool are listed as its inputs', async ({ page }) => {
   await openFiles(page);
   const inputs = popover(page).locator('.pnp-popover-row[data-kind="input"]');
   await expect(inputs).toHaveCount(1);
-  await expect(inputs).toContainText('2 images loaded in Bleed');
+  await expect(inputs).toContainText('2 images loaded in Bleed tool');
 
   // The set opens in the viewer, and other tools can import it.
   await inputs.locator('.pnp-popover-item').click();
@@ -117,7 +117,7 @@ test('files dropped into a tool are listed as its inputs', async ({ page }) => {
   const picker = page.locator('#dropZone .pnp-popover');
   await expect(picker.locator('.pnp-popover-row')).toHaveCount(1);
   await picker.locator('.pnp-popover-item').click();
-  await expect(page.getByText('Loaded 2 file(s) from Bleed.')).toBeVisible();
+  await expect(page.getByText('Loaded 2 file(s) from Bleed tool.')).toBeVisible();
 });
 
 test('pickers only offer sets with files the input accepts', async ({ page }) => {
@@ -163,8 +163,8 @@ test('crop cards records the cropped cards as output without Send to', async ({ 
   await openFiles(page);
   const outputs = popover(page).locator('.pnp-popover-row[data-kind="output"]');
   await expect(outputs).toHaveCount(1);
-  await expect(outputs).toContainText('from CardCrop');
-  await expect(popover(page).locator('.pnp-popover-row[data-kind="input"]')).toContainText('1 image loaded in CardCrop');
+  await expect(outputs).toContainText('from CardCrop tool');
+  await expect(popover(page).locator('.pnp-popover-row[data-kind="input"]')).toContainText('1 image loaded in CardCrop tool');
 });
 
 test('downloads are recorded; zips are unpacked for preview', async ({ page }) => {
@@ -175,7 +175,7 @@ test('downloads are recorded; zips are unpacked for preview', async ({ page }) =
   await download(page, () => page.click('#exportCardsBtn'));
   await openFiles(page);
   const outputs = popover(page).locator('.pnp-popover-row[data-kind="output"]');
-  await expect(outputs).toContainText('2 images from Cut');
+  await expect(outputs).toContainText('2 images from Cut tool');
   await outputs.locator('.pnp-popover-item').click();
   await expect(page.locator('.pnp-viewer-thumb')).toHaveCount(2);
   await expect(page.locator('.pnp-viewer-img')).toHaveAttribute('src', /^blob:/);

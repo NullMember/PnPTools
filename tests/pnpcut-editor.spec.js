@@ -271,7 +271,7 @@ test.describe('project files', () => {
     const assigned = await sheet.locator('.cell-row select').evaluateAll((s) => s.map((x) => x.value).filter(Boolean));
     expect(assigned).toHaveLength(3);
     await expect(sheet.locator('.cell-row select').first().locator('option:checked')).toHaveText('Hero');
-    await expect(sheet.getByText('Imported 1 file from Card editor.')).toBeVisible();
+    await expect(sheet.getByText('Imported 1 file from Card editor tool.')).toBeVisible();
     expect(errors).toEqual([]);
   });
 
