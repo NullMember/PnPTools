@@ -374,13 +374,15 @@ previewCanvas.addEventListener('pointercancel', () => {
 // the DPI the cards are rendered at.
 let cropPrefix = '';
 let cropDpi = 0;
+let cropSizeMm = null; // { w, h } of a card, recorded in each PNG
 
 // Add a cropped card to its zip and remember it for "Send to". The card is
 // stamped with its DPI, so Layout and the other tools print it at the right
 // size; the stamping finishes in the background (see settleCards).
 function recordCard(zip, list, name, blob) {
     name = cropPrefix + name;
-    const stamped = PnP.setImageDpi(blob, cropDpi);
+    const stamped = PnP.setImageDpi(blob, cropDpi)
+        .then((b) => (cropSizeMm && b.type === 'image/png' ? PnP.setSizeNote(b, cropSizeMm.w, cropSizeMm.h) : b));
     zip.file(name, stamped);
     list.push({ name, blob: stamped });
 }
@@ -493,6 +495,7 @@ cropForm.addEventListener('submit', async (event) => {
     const base = PnP.outputBase(sourceFiles);
     cropPrefix = base ? `${base}_` : '';
     cropDpi = dpi;
+    cropSizeMm = { w: cardWidthMM, h: cardHeightMM };
     sendMenu.setEnabled(false);
 
     const endPage = parseInt(document.getElementById('endPage').value, 10) || pdfDoc.getPageCount();

@@ -154,3 +154,70 @@ test('selected files can be removed', async ({ page }) => {
   await expect(tiles(page)).toHaveCount(1);
   await expect(tiles(page).first()).toContainText('B.png');
 });
+
+// ---- sizes the files record ----
+
+// A square PNG with a recorded size (and optionally a wrong DPI), made in the page.
+async function notedSquare(page, name, { px = 400, sizeMm = 50, dpi = null } = {}) {
+  const b64 = await page.evaluate(async ({ px, sizeMm, dpi }) => {
+    const c = document.createElement('canvas');
+    c.width = c.height = px;
+    c.getContext('2d').fillRect(0, 0, px, px);
+    let blob = await PnP.canvasToBlob(c);
+    if (dpi) blob = await PnP.setImageDpi(blob, dpi);
+    blob = await PnP.setSizeNote(blob, sizeMm, sizeMm);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let s = '';
+    bytes.forEach((b) => { s += String.fromCharCode(b); });
+    return btoa(s);
+  }, { px, sizeMm, dpi });
+  return { name, mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') };
+}
+
+test('the library shows the size a tool records in its output', async ({ page }) => {
+  await page.goto('PnPBleed/index.html');
+  const img = await makeCardImages(page);
+  await page.setInputFiles('#imageInput', [img.opaque]);
+  await expect(page.locator('#downloadBtn')).toBeEnabled();
+  await page.click('#downloadBtn');
+  const output = library(page).locator('.pnp-library-batch[data-kind="output"] .pnp-library-tile');
+  await expect(async () => { // the download reaches the library in the background
+    await page.keyboard.press('Escape');
+    await openLibrary(page);
+    await expect(output).toHaveCount(1, { timeout: 500 });
+  }).toPass();
+  await expect(output).toContainText('63 mm × 88 mm');
+  await output.click();
+  await expect(props(page).locator('#pnpLibBleed')).toHaveValue('2');
+});
+
+test('Bleed uses the size a file records over the typed card size', async ({ page }) => {
+  await page.goto('PnPBleed/index.html');
+  await page.fill('#bleedInput__display', '2');
+  await page.setInputFiles('#imageInput', [await notedSquare(page, 'Coin.png', { px: 400, sizeMm: 50 })]); // 8 px per mm
+  await expect(page.locator('#downloadBtn')).toBeEnabled();
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#downloadBtn')]);
+  const width = await page.evaluate(async (b) => (await createImageBitmap(new Blob([new Uint8Array(b)]))).width, [...require('node:fs').readFileSync(await dl.path())]);
+  expect(width).toBe(400 + 2 * 16); // 2 mm of bleed at 8 px per mm, not at the 63 × 88 mm card's
+});
+
+test('Layout sizes a piece by the size its file records, even with a wrong DPI', async ({ page }) => {
+  await page.goto('PnPLayout/index.html');
+  await page.setInputFiles('#imageInput', [await notedSquare(page, 'Token.png', { sizeMm: 40, dpi: 72 })]);
+  await expect(page.locator('#pieceList .piece')).toHaveCount(1);
+  expect(await pieces(page)).toEqual([{ name: 'Token.png', w: 40, h: 40, back: null }]);
+});
+
+test('files whose size matches what they record reach tools as they are', async ({ page }) => {
+  await page.goto('PnPLayout/index.html');
+  const same = await page.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = 300; c.height = 420;
+    const blob = await PnP.setSizeNote(await PnP.canvasToBlob(c), 63, 88);
+    const own = await PnP.readSizeNotes(blob);
+    const file = await PnP.library.itemFile({ name: 'A.png', blob, meta: { ...own, file: own } });
+    const edited = await PnP.library.itemFile({ name: 'A.png', blob, meta: { ...own, widthMm: 70, file: own } });
+    return { untouched: file.size === blob.size, redrawn: edited.size !== blob.size };
+  });
+  expect(same).toEqual({ untouched: true, redrawn: true });
+});

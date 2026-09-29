@@ -28,7 +28,7 @@ function loadBitmap(file) {
 
 // A "face" is one side of a piece: the trimmed image plus derived data.
 async function loadFace(file) {
-    const [img, dpi, bleedNote] = await Promise.all([loadBitmap(file), readImageDpi(file), PnP.readPngText(file, 'PnPTools:bleed')]);
+    const [img, dpi, bleedNote, notes] = await Promise.all([loadBitmap(file), readImageDpi(file), PnP.readPngText(file, 'PnPTools:bleed'), PnP.readSizeNotes(file)]);
     const full = document.createElement('canvas');
     full.width = img.naturalWidth;
     full.height = img.naturalHeight;
@@ -59,7 +59,9 @@ async function loadFace(file) {
 
     // bleedMm: the bleed Bleed recorded in the image (null if none recorded).
     const bleedMm = bleedNote !== null && Number.isFinite(parseFloat(bleedNote)) ? parseFloat(bleedNote) : null;
-    const face = { file, full: canvas, dpi: dpi || null, bleedMm, preview: scaledCopy(canvas, 400) };
+    // sizeMm: the piece's size (without bleed) the file records, if any.
+    const sizeMm = notes.widthMm && notes.heightMm ? { w: notes.widthMm, h: notes.heightMm } : null;
+    const face = { file, full: canvas, dpi: dpi || null, bleedMm, sizeMm, preview: scaledCopy(canvas, 400) };
     setFaceInset(face, 0);
     return face;
 }

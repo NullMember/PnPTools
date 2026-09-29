@@ -60,7 +60,9 @@ function readSettings() {
 
 // ---- Adding pieces ---------------------------------------------------------------
 
+// A recorded size wins over DPI (which many images carry as a meaningless 72).
 function defaultWidthMm(face) {
+    if (face.sizeMm) return face.sizeMm.w;
     const dpi = face.dpi || num('defaultDpi', 300) || 300;
     return Math.round((face.w / dpi) * 25.4 * 10) / 10;
 }
@@ -93,11 +95,13 @@ async function loadFaces(files) {
     return faces;
 }
 
-// The bleed already in an image, in its pixels (by its DPI): what Bleed
-// recorded in it, else the "Images already include bleed" setting.
+// The bleed already in an image, in its pixels: what Bleed recorded in it,
+// else the "Images already include bleed" setting.
 function imageBleedPx(face) {
-    const dpi = face.dpi || num('defaultDpi', 300) || 300;
     const mm = face.bleedMm !== null ? face.bleedMm : Math.max(0, num('imageBleed'));
+    // A recorded size gives the image's pixels per mm; else its DPI.
+    if (face.sizeMm) return mm * face.full.width / (face.sizeMm.w + 2 * mm);
+    const dpi = face.dpi || num('defaultDpi', 300) || 300;
     return mm * dpi / 25.4;
 }
 

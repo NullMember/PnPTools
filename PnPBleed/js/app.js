@@ -49,6 +49,7 @@ async function loadFiles(files) {
     for (const file of files) {
         const canvas = await imageToCanvas(file);
         if (canvas) canvas.dpi = await PnP.readImageDpi(file); // null when the file doesn't say
+        if (canvas) canvas.notes = await PnP.readSizeNotes(file); // its size in mm, if it records one
         if (canvas) state.images.push({ file, canvas, thumb: thumbnailOf(canvas), processed: null });
         else failed.push(file.name);
     }
@@ -109,9 +110,15 @@ function imageToCanvas(file) {
     });
 }
 
-// Pixels per mm of an image, given the entered card (trim) size. Shapes
-// have no card size: they use the DPI their file records, when it does.
+// Pixels per mm of an image: from the size the file records (set in the
+// library, or by CardCrop tool), else the entered card (trim) size. Shapes
+// without a recorded size use the DPI their file records, when it does.
 function pxPerMmFor(canvas) {
+    const n = canvas.notes || {};
+    if (n.widthMm && n.heightMm) {
+        const b = n.bleedMm || 0; // an image that already has bleed
+        return (canvas.width / (n.widthMm + 2 * b) + canvas.height / (n.heightMm + 2 * b)) / 2;
+    }
     if (elements.bleedMode.value === 'shape' && canvas.dpi) return canvas.dpi / 25.4;
     const cardWidthMm = parseFloat(elements.cardWidthInput.value) || 63;
     const cardHeightMm = parseFloat(elements.cardHeightInput.value) || 88;
@@ -299,7 +306,9 @@ async function cardBlob(i) {
     const pxPerMm = pxPerMmFor(state.images[i].canvas);
     const bleedMm = Math.round(bleedPxFor(state.images[i].canvas) / pxPerMm * 1000) / 1000;
     const stamped = await PnP.setImageDpi(blob, pxPerMm * 25.4);
-    return PnP.setPngText(stamped, 'PnPTools:bleed', String(bleedMm));
+    const src = state.images[i].canvas;
+    const sized = await PnP.setSizeNote(stamped, src.width / pxPerMm, src.height / pxPerMm);
+    return PnP.setPngText(sized, 'PnPTools:bleed', String(bleedMm));
 }
 
 // Download current processed card

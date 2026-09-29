@@ -54,9 +54,10 @@ test('CardCrop cards keep their size in Layout', async ({ page }) => {
     const bytes = new Uint8Array(await b.arrayBuffer());
     let s = '';
     bytes.forEach((x) => { s += String.fromCharCode(x); });
-    return { b64: btoa(s), dpi: await PnP.readImageDpi(b) };
+    return { b64: btoa(s), dpi: await PnP.readImageDpi(b), size: await PnP.readSizeNotes(b) };
   });
   expect(Math.round(card.dpi)).toBe(288); // the crop DPI setting
+  expect(card.size).toEqual({ widthMm: 63, heightMm: 88 }); // the card size, recorded
 
   await page.goto('PnPLayout/index.html');
   await page.setInputFiles('#imageInput', { name: 'card.png', mimeType: 'image/png', buffer: Buffer.from(card.b64, 'base64') });

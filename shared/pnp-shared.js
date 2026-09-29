@@ -1065,12 +1065,19 @@ ${content(([x, y]) => [x - m, y - m])}
         // moves that batch to the top.
         async function addBatch({ kind = 'output', from, items }) {
             const refs = await putFiles(items);
+            // What the files say about themselves (size and bleed notes) fills
+            // in their library properties.
+            for (let i = 0; i < refs.length; i++) {
+                const item = items.filter((it) => it && it.blob)[i];
+                const own = /^image\/png$/.test(refs[i].type) ? await readSizeNotes(item.blob) : {};
+                if (Object.keys(own).length) refs[i].meta = { ...own, file: own };
+            }
             if (!refs.length) return null;
             const sig = signature(kind, from, refs);
             const same = (await tx(['batches'], 'readonly', (b) => b.getAll())).find((x) => x.sig === sig);
             const id = same ? same.id : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
             refs.forEach((r, i) => { r.id = `${id}:${i}`; });
-            if (same) refs.forEach((r, i) => { r.meta = (same.items[i] && same.items[i].meta) || undefined; });
+            if (same) refs.forEach((r, i) => { r.meta = (same.items[i] && same.items[i].meta) || r.meta; });
             await tx(['batches'], 'readwrite', (b) => b.put({ id, from, kind, sig, created: Date.now(), items: refs }));
             await touch();
             return id;
@@ -1592,7 +1599,35 @@ ${content(([x, y]) => [x - m, y - m])}
     // ---------------------------------------------------------------- library items
 
     // Edits set in the library that change the image a tool gets.
-    const isEdited = (meta) => !!(meta && (meta.rotate || meta.crop || meta.widthMm || meta.heightMm || meta.bleedMm));
+    // Edits set in the library that change the image: a turn, a crop, or a
+    // size or bleed other than the one the file itself records (meta.file).
+    const isEdited = (meta) => {
+        if (!meta) return false;
+        const own = meta.file || {};
+        return !!(meta.rotate || meta.crop
+            || (meta.widthMm || 0) !== (own.widthMm || 0)
+            || (meta.heightMm || 0) !== (own.heightMm || 0)
+            || (meta.bleedMm || 0) !== (own.bleedMm || 0));
+    };
+
+    // Size and bleed notes in a PNG ("PnPTools:size" = "63x88" mm, the card
+    // inside any bleed; "PnPTools:bleed" = mm): { widthMm, heightMm, bleedMm }.
+    async function readSizeNotes(blob) {
+        const out = {};
+        try {
+            const size = await readPngText(blob, 'PnPTools:size');
+            const m = /^([\d.]+)x([\d.]+)$/.exec(size || '');
+            if (m) { out.widthMm = parseFloat(m[1]); out.heightMm = parseFloat(m[2]); }
+            const bleed = parseFloat(await readPngText(blob, 'PnPTools:bleed'));
+            if (bleed > 0) out.bleedMm = bleed;
+        } catch (err) { /* not a PNG we can read */ }
+        return out;
+    }
+
+    // Record the card size (mm, without bleed) in a PNG.
+    function setSizeNote(blob, widthMm, heightMm) {
+        return setPngText(blob, 'PnPTools:size', `${+widthMm.toFixed(3)}x${+heightMm.toFixed(3)}`);
+    }
     const isRaster = (type) => /^image\//.test(type || '') && type !== 'image/svg+xml';
 
     // A library item as a file for a tool: the image with the item's
@@ -1643,6 +1678,7 @@ ${content(([x, y]) => [x - m, y - m])}
         let blob = await new Promise((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode image.'))), 'image/png'));
         if (dpi) blob = await setImageDpi(blob, dpi);
         if (bleed) blob = await setPngText(blob, 'PnPTools:bleed', String(bleed));
+        if (meta.widthMm && meta.heightMm) blob = await setSizeNote(blob, meta.widthMm, meta.heightMm);
         return asFile(blob, `${baseName(item.name)}.png`);
     }
 
@@ -2577,6 +2613,8 @@ ${content(([x, y]) => [x - m, y - m])}
         setImageDpi,
         setPngText,
         readPngText,
+        readSizeNotes,
+        setSizeNote,
         canvasToBlob: (canvas, type = 'image/png', quality) => new Promise((resolve, reject) => {
             canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode image.'))), type, quality);
         }),
