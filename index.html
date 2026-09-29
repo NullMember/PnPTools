@@ -17,13 +17,13 @@
     <div class="container">
         <header>
             <h1>PnP Tuck Box</h1>
-            <p class="subtitle">Make a printable box for your deck: pick a style and card size, add artwork to the panels, then print it with cut and fold lines or send the cut file to your machine.</p>
+            <p class="subtitle">Print a box for your deck, with your own artwork.</p>
         </header>
 
         <div class="content">
             <div class="sidebar">
                 <div class="panel">
-                    <div class="panel-title">Box Style <span class="help" tabindex="0" data-tip="Lid depth (two-piece boxes): how deep the lid is compared to the base; 100% covers the base completely, less makes a shallower lid. Sleeve height (sleeves): how much of the card’s height the band covers. The “No glue” styles hold together with tabs pushed through slits (the short cut lines inside the pieces), with no glue or tape.">?</span></div>
+                    <div class="panel-title">Box Style <span class="help" tabindex="0" data-tip="“No glue” styles lock with tabs pushed into slits.">?</span></div>
                     <div class="control-group">
                         <select id="boxStyle">
                             <option value="tuck">Classic tuck box</option>
@@ -53,7 +53,7 @@
                 </div>
 
                 <div class="panel">
-                    <div class="panel-title">Deck <span class="help" tabindex="0" data-tip="The box is sized around the deck: card size plus the deck's thickness (cards × thickness per card). The per-card thickness is worked out from the card weight (GSM, about 1 mm per 1000 GSM), any laminating film and the sleeves. Or type it, or measure the whole stacked deck and type that: the card weight is then worked back from it.">?</span></div>
+                    <div class="panel-title">Deck <span class="help" tabindex="0" data-tip="Per card = card weight + film + sleeves. Or measure the whole deck: the rest is worked out from it.">?</span></div>
                     <div class="control-group">
                         <label for="cardPreset">Card size</label>
                         <select id="cardPreset"></select>
@@ -114,11 +114,10 @@
                             <input type="number" id="deckThickness" value="17.28" min="0.1" step="0.1" data-unit="mm" data-persist="false">
                         </div>
                     </div>
-                    <div class="input-hint">Per card = card weight + film + sleeves. Measure the whole stacked deck for the most accurate fit: the per-card thickness is worked out from it.</div>
                 </div>
 
                 <div class="panel">
-                    <div class="panel-title">Fit <span class="help" tabindex="0" data-tip="Clearance is the extra room around the deck so it slides in and out easily. Paper thickness is the cardstock you print on; it's added at every fold. Type it, or the paper's weight in GSM (grams per m²) to estimate it: about 1 mm per 1000 GSM, a little thinner for coated card and thicker for uncoated, so measure with calipers for the best fit. Laminated: film on one or both sides adds its thickness to the paper's. Tab lip (tab-lock styles): how far each hook tab's barb sits from the side's edge, in paper thicknesses. Lower it if the tabs sit loose once locked; raise it if they are hard to push in.">?</span></div>
+                    <div class="panel-title">Fit <span class="help" tabindex="0" data-tip="Clearance: room around the deck. Paper weight estimates thickness (about 1 mm per 1000 GSM); calipers are more exact. Tab lip: lower it if tabs sit loose, raise it if they're hard to push in.">?</span></div>
                     <div class="control-group">
                         <label for="clearance">Clearance (mm)</label>
                         <input type="number" id="clearance" value="1" min="0" max="10" step="0.1" data-unit="mm">
@@ -158,7 +157,7 @@
                 </div>
 
                 <div class="panel">
-                    <div class="panel-title">Artwork <span class="help" tabindex="0" data-tip="Add images below, then pick one for each panel (click its thumbnail), or drag an image onto a panel here or in the preview. New images fill empty panels in order. Fill crops to cover the panel, Fit shows the whole image on the background colour, Stretch distorts it to the panel, Extend fits it and stretches its edge pixels to the panel's edges. Artwork continues past the cut line as bleed (its own pixels where it overflows the panel, otherwise its stretched edges). The background colour covers everything else, and bleeds where there's no artwork.">?</span></div>
+                    <div class="panel-title">Artwork <span class="help" tabindex="0" data-tip="Click a thumbnail to pick it for a panel, or drop an image on a panel. Fill covers the panel, Fit shows the whole image, Stretch distorts it, Extend fits it and stretches its edges.">?</span></div>
                     <div class="dropzone" id="artDrop">
                         <div class="dz-title">Drag &amp; drop artwork here</div>
                         <div>or click to browse</div>
@@ -179,7 +178,7 @@
                 </div>
 
                 <div class="panel">
-                    <div class="panel-title">Print <span class="help" tabindex="0" data-tip="Printer margin is the unprintable edge of your printer; every part is laid out inside it. Cut lines are solid and fold lines dashed; turn them off when a cutting machine does the cutting.">?</span></div>
+                    <div class="panel-title">Print <span class="help" tabindex="0" data-tip="Printer margin: the edge your printer can't print. Turn cut and fold lines off when a machine cuts.">?</span></div>
                     <div class="control-group">
                         <label for="paperPreset">Paper</label>
                         <select id="paperPreset"></select>
@@ -209,7 +208,7 @@
                 </div>
 
                 <div class="panel" id="machinePanel">
-                    <div class="panel-title">Cutting Machine <span class="help" tabindex="0" data-tip="The strip around the mat your machine can't cut into. Cricut's is 0.25&Prime; (6.35 mm); pick Custom and type your machine's value otherwise. The SVG cut file is sized to the paper minus this margin and outlined by a guide rectangle for lining the cut up with the print.">?</span></div>
+                    <div class="panel-title">Cutting Machine <span class="help" tabindex="0" data-tip="The mat edge your machine can't cut (Cricut: 6.35 mm).">?</span></div>
                     <div class="control-group">
                         <label for="machinePreset">Machine</label>
                         <select id="machinePreset"></select>
@@ -217,7 +216,7 @@
                     <div class="control-group">
                         <label for="machineMargin">Mat dead margin (mm)</label>
                         <input type="number" id="machineMargin" value="6.35" min="0" step="0.01" data-unit="mm">
-                        <div class="input-hint">Keep the printer margin at least this wide so no cut line falls where the machine can’t cut.</div>
+                        <div class="input-hint">Keep the printer margin at least this wide.</div>
                     </div>
                 </div>
 
@@ -227,7 +226,7 @@
                         <button class="btn-primary" id="downloadPdf">Download PDF</button>
                         <button class="btn-secondary" id="downloadSvg">Download SVG cut file</button>
                     </div>
-                    <div class="input-hint">The SVG has a cut layer and a score (fold) layer at the same positions as the PDF, inside a paper guide sized by the machine’s dead margin.</div>
+                    <div class="input-hint">The SVG has cut and score layers matching the PDF.</div>
                 </div>
             </div>
 

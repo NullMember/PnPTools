@@ -14,14 +14,14 @@ const ART_MODES = { fill: 'Fill', fit: 'Fit', stretch: 'Stretch', extend: 'Exten
 const IMAGE_DRAG_TYPE = 'application/x-pnp-image';
 
 const STYLE_HINTS = {
-    tuck: 'One piece with a tuck-in lid and bottom. The usual card-deck box. The short cuts at the ends of each tuck fold catch the dust flaps and hold the lid shut.',
-    tuckFixed: 'A tuck box whose bottom is glued shut: glue the side seam, then fold the bottom dust flaps in and glue the bottom’s flap inside the back. Only the lid opens.',
-    twoPiece: 'A base tray and a slightly larger lid that slides over it. The deck lies flat.',
+    tuck: 'The usual card box, with tuck-in lid and bottom.',
+    tuckFixed: 'A tuck box with a glued bottom. Only the lid opens.',
+    twoPiece: 'A tray and a lid that slides over it.',
     sleeve: 'An open band that slides over the deck.',
-    tuckLock: 'No glue, and no tabs show. Fold the flap on the back inside the box, along the last side. Then fold that side’s hook tabs 90° inward and push them into the slits just inside the flap, by the corner, so they lock inside. The ends tuck in as usual. Tilt each tab so its straight side goes in first, then straighten it: the barb locks.',
-    tuckFixedLock: 'No glue, and a bottom that stays shut. Close the side as for the tab lock. At the bottom, fold the dust flaps in, then the flap on the back, then the bottom; fold the bottom’s hook tabs 90° up into the slits just inside the back’s flap. Only the lid opens. Tilt each tab so its straight side goes in first, then straighten it: the barb locks.',
-    twoPieceLock: 'No glue. For each tray: fold the long walls up and their inner halves down inside, turning the corner flaps in. Then fold the short walls up over the flaps and down inside. Push every tab into its slit in the floor.',
-    sleeveLock: 'No glue, and no tabs show. Fold the flap on the back inside the band, along the last side. Then fold that side’s hook tabs 90° inward and push them into the slits just inside the flap, by the corner, so they lock inside. Tilt each tab so its straight side goes in first, then straighten it: the barb locks.',
+    tuckLock: 'Fold the back’s flap inside, then push the side’s hook tabs into the slits by the corner: straight side first, then straighten to lock.',
+    tuckFixedLock: 'Close the side as for the tab lock. At the bottom, fold in the dust flaps, the back’s flap, then the bottom, and lock its hook tabs into the slits.',
+    twoPieceLock: 'Fold each wall up and its inner half down inside, corner flaps in first. Push every tab into its slit in the floor.',
+    sleeveLock: 'Fold the back’s flap inside, then push the side’s hook tabs into the slits by the corner: straight side first, then straighten to lock.',
 };
 
 // The chosen style, with an old saved name read as its new one (settings
@@ -373,7 +373,7 @@ function updateStyleUI() {
     $('sleeveHeightGroup').hidden = BOX_STYLES[style].option !== 'sleeveHeight';
     $('tabLipGroup').hidden = !BOX_STYLES[style].tabs;
     if (BOX_STYLES[style].tabs) {
-        $('tabLipHint').textContent = `The barb sits ${PnP.units.format(lockLip(readConfig()))} from the side. Lower it if the tabs sit loose, raise it if they are hard to push in.`;
+        $('tabLipHint').textContent = `The barb sits ${PnP.units.format(lockLip(readConfig()))} from the side.`;
     }
 }
 
@@ -413,7 +413,7 @@ function render() {
     });
 
     const tooBig = state.pages.some((p) => p.items.some((i) => !i.fits));
-    setStatus(tooBig ? 'The box is larger than the printable area of this paper. Choose a larger paper (e.g. A3) or reduce the margin.' : '', 'error');
+    setStatus(tooBig ? 'The box doesn’t fit this paper. Choose a larger paper or a smaller margin.' : '', 'error');
 
     const grid = $('sheetGrid');
     grid.innerHTML = '';
@@ -577,7 +577,7 @@ $('downloadSvg').addEventListener('click', async () => {
     const paper = paperSize();
     const machineMargin = num('machineMargin');
     if (state.pages.some((page) => linesInDeadMargin(page, paper, machineMargin))) {
-        PnP.toast('Some lines fall inside the cutting machine’s dead margin and won’t be cut. Widen the printer margin.', 'error');
+        PnP.toast('Some lines are in the mat’s dead margin and won’t be cut. Widen the printer margin.', 'error');
     }
     const svgs = state.pages.map((page) => buildSvg(page, paper, machineMargin));
     const base = `${outputBase()}-cut`;
