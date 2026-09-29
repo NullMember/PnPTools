@@ -18,7 +18,7 @@ Each tool is also deployed standalone on its own Pages site:
 | `PnPCardCrop` | Crop cards out of PnP PDF/image sheets | `index.html` (grid), `freeform.html` (vector editor), `script.js`, `js/freeform.js` |
 | `PnPAlign` | Align colour/rotation/scale/position of scanned cards | `index.html`, `js/app.js` + helpers |
 | `PnPBleed` | Add bleed to card images | `index.html`, `js/app.js`, `bleed.js`, `edge.js`, `sides.js` |
-| `PnPLayout` | Pack odd-shaped pieces onto sheets, or cards in a grid with crop marks | `index.html`, `js/app.js`, `packer.js` run in the `pack-worker.js` Web Worker, `grid.js` (Grid mode) |
+| `PnPLayout` | Pack odd-shaped pieces onto sheets, or cards in a grid with crop marks, or fronts and backs on one page to fold | `index.html`, `js/app.js`, `packer.js` run in the `pack-worker.js` Web Worker, `grid.js` (Grid and Fold modes) |
 | `PnPBooklet` | Tile pages / impose saddle-stitch booklets | `index.html`, `js/main.js` + modules |
 | `PnPCut` | Cutting-machine grids, line-art editor, sheet assembler | `index.html`, `editor.html`, `sheet.html` |
 | `PnPTuckBox` | Tuck boxes, two-piece boxes, sleeves; print PDF + cut/score SVG | `index.html`, `js/app.js`, `geometry.js`, `render.js`, `art-editor.js` (per-panel crop / zoom / pan dialog) |

@@ -7,13 +7,13 @@ const rows = (page) => page.locator('#pieceList .piece');
 
 // A plain 63 × 88 mm card image at `dpi`, with the DPI recorded or not;
 // `bleed` mm of bleed around it makes the image that much bigger.
-async function card(page, dpi, { record = true, name = 'Card.png', bleed = 0 } = {}) {
-  const b64 = await page.evaluate(async ({ dpi, record, bleed }) => {
+async function card(page, dpi, { record = true, name = 'Card.png', bleed = 0, color = '#3366cc' } = {}) {
+  const b64 = await page.evaluate(async ({ dpi, record, bleed, color }) => {
     const c = document.createElement('canvas');
     c.width = Math.round((63 + 2 * bleed) / 25.4 * dpi);
     c.height = Math.round((88 + 2 * bleed) / 25.4 * dpi);
     const g = c.getContext('2d');
-    g.fillStyle = '#3366cc';
+    g.fillStyle = color;
     g.fillRect(0, 0, c.width, c.height);
     let blob = await PnP.canvasToBlob(c);
     if (record) blob = await PnP.setImageDpi(blob, dpi);
@@ -21,7 +21,7 @@ async function card(page, dpi, { record = true, name = 'Card.png', bleed = 0 } =
     let s = '';
     bytes.forEach((b) => { s += String.fromCharCode(b); });
     return btoa(s);
-  }, { dpi, record, bleed });
+  }, { dpi, record, bleed, color });
   return { name, mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') };
 }
 
@@ -264,4 +264,77 @@ test('corner radius rounds the cut outline of rectangular cards only', async ({ 
   await expect(status(page)).toContainText('2 piece(s)');
   const svg = await download(page, () => page.click('#downloadSvg'));
   expect((svg.text().match(/<path /g) || []).length).toBeGreaterThanOrEqual(2);
+});
+
+test.describe('fold mode', () => {
+  const setup = async (page, { qty = 4, back = true } = {}) => {
+    await page.selectOption('#packMode', 'fold');
+    await expect(page.locator('#foldGroup')).toBeVisible();
+    await page.setInputFiles('#imageInput', await card(page, 300));
+    await rows(page).getByLabel('Quantity').fill(String(qty));
+    if (back) {
+      const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Add backs…' }).click()]);
+      await chooser.setFiles(await card(page, 300, { name: 'Back.png', color: '#cc3333' }));
+      await expect(rows(page).locator('.piece-face.back img')).toHaveCount(1);
+    }
+  };
+  const layout = (page) => page.evaluate(() => ({ sheets: state.layout.sheets, fold: state.layout.fold, grid: state.layout.grid }));
+
+  test('backs are the fronts mirrored across the fold', async ({ page }) => {
+    await setup(page);
+    // A4: four cards on their side fit either fold; auto takes the vertical one.
+    await expect(status(page)).toContainText('4 piece(s) on 1 sheet(s)');
+    await expect(status(page)).toContainText('backs across a vertical fold');
+    const { sheets, fold } = await layout(page);
+    expect(fold.at).toBeCloseTo(105, 5); // middle of the printable area
+    expect(fold.backs[0]).toHaveLength(4);
+    sheets[0].forEach((front, i) => {
+      const back = fold.backs[0][i];
+      expect(back.cx).toBeCloseTo(2 * fold.at - front.cx, 5);
+      expect(back.cy).toBeCloseTo(front.cy, 5);
+      expect(back.angle).toBe(-front.angle);
+      expect(front.cx).toBeLessThan(fold.at); // fronts on one half
+    });
+    // Fold margin 2 mm: the grid ends 2 mm before the fold.
+    const right = Math.max(...sheets[0].map((p) => p.cx)) + 88 / 2;
+    expect(fold.at - right).toBeCloseTo(2, 0);
+  });
+
+  test('a horizontal fold turns the backs upside down', async ({ page }) => {
+    await page.selectOption('#foldDirection', 'horizontal');
+    await setup(page, { qty: 3 });
+    await rows(page).getByLabel('Allow rotation').uncheck();
+    await expect(status(page)).toContainText('3 × 1 per sheet, backs across a horizontal fold');
+    const { sheets, fold } = await layout(page);
+    expect(fold.backs[0][0].angle).toBe(180);
+    expect(fold.backs[0][0].cy).toBeCloseTo(2 * fold.at - sheets[0][0].cy, 5);
+  });
+
+  test('the preview shows the backs beside the fronts, and the PDF has no back pages', async ({ page }) => {
+    await setup(page);
+    await expect(status(page)).toContainText('(1 PDF page(s))');
+    await expect(page.locator('#sideToggle')).toBeHidden();
+    const colours = await page.evaluate(() => {
+      const c = document.querySelector('#sheetGrid canvas');
+      const k = c.width / readSettings().paper.w;
+      const at = (p) => [...c.getContext('2d').getImageData(Math.round(p.cx * k), Math.round(p.cy * k), 1, 1).data.slice(0, 3)];
+      return { front: at(state.layout.sheets[0][0]), back: at(state.layout.fold.backs[0][0]) };
+    });
+    expect(colours.front[2]).toBeGreaterThan(150); // blue front
+    expect(colours.back[0]).toBeGreaterThan(150); // red back
+    const pdf = await download(page, () => page.click('#downloadPdf'));
+    expect(await pdfPages(page, pdf)).toBe(1);
+  });
+
+  test('crop marks stay off the fold side', async ({ page }) => {
+    await setup(page, { back: false });
+    await expect(status(page)).toContainText('backs across a vertical fold');
+    const { marks, fold } = await page.evaluate(() => {
+      const s = readSettings();
+      return { marks: cropMarks(state.layout.grid, s.paper, s.reach, state.layout.fold), fold: state.layout.fold };
+    });
+    expect(marks.length).toBeGreaterThan(0);
+    marks.forEach(([x1, , x2]) => expect(Math.max(x1, x2)).toBeLessThan(fold.at));
+    expect((await layout(page)).fold.backs[0]).toHaveLength(0); // no back image, nothing mirrored
+  });
 });
