@@ -359,3 +359,28 @@ test.describe('unsaved-work warning after Save', () => {
     expect(await warns()).toBe(false);
   });
 });
+
+// ---- storage limit ----
+
+test('Inputs & outputs stays under its size limit, dropping the oldest sets', async ({ page }) => {
+  await page.goto('PnPBleed/index.html');
+  const left = await page.evaluate(async () => {
+    const mb = (n) => new Blob([new Uint8Array(n * 1024 * 1024)], { type: 'image/png' });
+    const ids = [];
+    for (let i = 0; i < 4; i++) { // 4 × 150 MB > 500 MB
+      ids.push(await PnP.recordFiles({ kind: i % 2 ? 'input' : 'output', items: [{ name: `big${i}.png`, blob: mb(150) }] }));
+      await new Promise((r) => setTimeout(r, 5)); // distinct timestamps
+    }
+    const sets = await PnP.handoff.list();
+    return { names: sets.map((s) => s.items[0].name), newest: sets[0].id === ids[3] };
+  });
+  expect(left.names).toEqual(['big3.png', 'big2.png', 'big1.png']);
+  expect(left.newest).toBe(true);
+
+  await openFiles(page);
+  await expect(popover(page).locator('.pnp-popover-footer')).toContainText('450.0 MB of 500.0 MB used');
+  await expect(popover(page).locator('.pnp-popover-row').first()).toContainText('150.0 MB');
+  await popover(page).getByRole('button', { name: 'Clear all' }).click();
+  await expect(popover(page).locator('.pnp-popover-row')).toHaveCount(0);
+  await expect(popover(page).locator('.pnp-popover-empty')).toBeVisible();
+});
