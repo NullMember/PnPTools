@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Booklet Creator</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/tool.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="shared/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#1a1d27">
+<script src="shared/pnp-theme.js"></script>
+<link rel="stylesheet" href="shared/pnp-shared.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Booklet Creator</h1>
+    <p class="subtitle">Print rulebooks and other pages several to a sheet, or as a fold-and-staple booklet.</p>
+  </header>
+
+  <div class="content">
+    <!-- Sidebar Controls -->
+    <div class="sidebar">
+
+      <!-- File Input -->
+      <div class="panel">
+        <div class="panel-title">Pages Input <span class="help" tabindex="0" data-tip="Drag thumbnails to reorder. Each page can be rotated or removed.">?</span></div>
+        <div class="dropzone" id="dropZone">
+          <div class="dz-title">Drop images or a PDF here</div>
+          <div>Images and PDFs — add as many as you like</div>
+          <input type="file" id="fileInput" multiple accept="image/*,.pdf">
+        </div>
+        <div id="fileList"></div>
+        <div class="thumbnails-container" id="pageThumbs"></div>
+      </div>
+
+      <!-- Sheet Size -->
+      <div class="panel">
+        <div class="panel-title">Sheet Size (output paper) <span class="help" tabindex="0" data-tip="The paper you print on.">?</span></div>
+        <div class="control-group">
+          <label for="sheetPreset">Preset</label>
+          <select id="sheetPreset"></select>
+        </div>
+        <div class="row">
+          <div class="control-group">
+            <label for="sheetW">Width (mm)</label>
+            <input type="number" id="sheetW" value="297" min="10" max="2000" step="1" data-unit="mm">
+          </div>
+          <div class="control-group">
+            <label for="sheetH">Height (mm)</label>
+            <input type="number" id="sheetH" value="210" min="10" max="2000" step="1" data-unit="mm">
+          </div>
+        </div>
+      </div>
+
+      <!-- Page Size -->
+      <div class="panel">
+        <div class="panel-title">Page Size (each page cell) <span class="help" tabindex="0" data-tip="The size of each page on the sheet.">?</span></div>
+        <div class="control-group">
+          <label for="pagePreset">Preset</label>
+          <select id="pagePreset"></select>
+        </div>
+        <div class="row">
+          <div class="control-group">
+            <label for="pageW">Width (mm)</label>
+            <input type="number" id="pageW" value="148" min="5" max="1000" step="1" data-unit="mm">
+          </div>
+          <div class="control-group">
+            <label for="pageH">Height (mm)</label>
+            <input type="number" id="pageH" value="210" min="5" max="1000" step="1" data-unit="mm">
+          </div>
+        </div>
+        <div class="input-hint">For card sheets, use Layout tool.</div>
+        <div id="sendSlot"></div>
+      </div>
+
+      <!-- Mode -->
+      <div class="panel">
+        <div class="panel-title">Layout Mode <span class="help" tabindex="0" data-tip="Booklet: print double-sided (flip on the short edge), fold in the middle and staple.">?</span></div>
+        <div class="control-group">
+          <select id="mode">
+            <option value="grid">Grid (tile pages in order)</option>
+            <option value="saddle">Saddle-stitch booklet (fold &amp; staple)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Grid Layout -->
+      <div class="panel" id="gridPanel">
+        <div class="panel-title">Grid Layout <span class="help" tabindex="0" data-tip="Pages across and down each sheet.">?</span></div>
+        <div class="row">
+          <div class="control-group">
+            <label for="cols">Columns</label>
+            <input type="number" id="cols" value="2" min="1" max="20" step="1">
+          </div>
+          <div class="control-group">
+            <label for="rows">Rows</label>
+            <input type="number" id="rows" value="1" min="1" max="20" step="1">
+          </div>
+        </div>
+        <button type="button" class="btn-secondary btn-small" id="fitGridBtn">Fit grid to sheet</button>
+      </div>
+
+      <!-- Direction -->
+      <div class="panel" id="directionPanel">
+        <div class="panel-title">Page Order Direction <span class="help" tabindex="0" data-tip="The order pages fill each sheet.">?</span></div>
+        <div class="control-group">
+          <select id="direction">
+            <option value="lr-tb">Left→Right, then Top→Bottom</option>
+            <option value="tb-lr">Top→Bottom, then Left→Right</option>
+            <option value="rl-tb">Right→Left, then Top→Bottom</option>
+            <option value="tb-rl">Top→Bottom, then Right→Left</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Borders -->
+      <div class="panel">
+        <div class="panel-title">Border Style</div>
+        <div class="control-group">
+          <select id="borderStyle">
+            <option value="none">None</option>
+            <option value="solid">Single Line</option>
+            <option value="dotted">Dotted Line</option>
+            <option value="double">Double Line</option>
+            <option value="double-dotted">Double Dotted Line</option>
+          </select>
+        </div>
+        <div class="row">
+          <div class="control-group">
+            <label for="borderWidth">Border Width (pt)</label>
+            <input type="number" id="borderWidth" value="0.5" min="0.1" max="5" step="0.1">
+          </div>
+          <div class="control-group">
+            <label for="borderColor">Border Color</label>
+            <select id="borderColor">
+              <option value="#000000">Black</option>
+              <option value="#666666">Gray</option>
+              <option value="#cccccc">Light Gray</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spacing -->
+      <div class="panel">
+        <div class="panel-title">Spacing (mm)</div>
+        <div class="row">
+          <div class="control-group">
+            <label for="colGap">Column Gap</label>
+            <input type="number" id="colGap" value="0" min="0" max="50" step="0.5" data-unit="mm">
+          </div>
+          <div class="control-group">
+            <label for="rowGap">Row Gap</label>
+            <input type="number" id="rowGap" value="0" min="0" max="50" step="0.5" data-unit="mm">
+          </div>
+        </div>
+      </div>
+
+      <!-- Crop -->
+      <div class="panel">
+        <div class="panel-title">Page Crop (mm) <span class="help" tabindex="0" data-tip="Trims each source page's edges, e.g. margins or bleed.">?</span></div>
+        <div class="row">
+          <div class="control-group">
+            <label for="cropTop">Top</label>
+            <input type="number" id="cropTop" value="0" min="0" max="500" step="0.5" data-unit="mm">
+          </div>
+          <div class="control-group">
+            <label for="cropBottom">Bottom</label>
+            <input type="number" id="cropBottom" value="0" min="0" max="500" step="0.5" data-unit="mm">
+          </div>
+        </div>
+        <div class="row">
+          <div class="control-group">
+            <label for="cropLeft">Left</label>
+            <input type="number" id="cropLeft" value="0" min="0" max="500" step="0.5" data-unit="mm">
+          </div>
+          <div class="control-group">
+            <label for="cropRight">Right</label>
+            <input type="number" id="cropRight" value="0" min="0" max="500" step="0.5" data-unit="mm">
+          </div>
+        </div>
+      </div>
+
+      <!-- Page Numbering -->
+      <div class="panel">
+        <div class="panel-title">Page Numbering <span class="help" tabindex="0" data-tip="Offset is the distance from the page edge.">?</span></div>
+        <div class="row">
+          <div class="control-group">
+            <label for="pageNumEnabled">Show Numbers</label>
+            <select id="pageNumEnabled">
+              <option value="off">Off</option>
+              <option value="on">On</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label for="pageNumPos">Position</label>
+            <select id="pageNumPos">
+              <option value="bottom-center">Bottom Center</option>
+              <option value="bottom-left">Bottom Left</option>
+              <option value="bottom-right">Bottom Right</option>
+              <option value="top-center">Top Center</option>
+              <option value="top-left">Top Left</option>
+              <option value="top-right">Top Right</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="control-group">
+            <label for="pageNumSize">Font Size (pt)</label>
+            <input type="number" id="pageNumSize" value="10" min="4" max="72" step="1">
+          </div>
+          <div class="control-group">
+            <label for="pageNumStart">Start Number</label>
+            <input type="number" id="pageNumStart" value="1" min="0" max="9999" step="1">
+          </div>
+        </div>
+        <div class="row">
+          <div class="control-group">
+            <label for="pageNumColor">Color</label>
+            <select id="pageNumColor">
+              <option value="#000000">Black</option>
+              <option value="#666666">Gray</option>
+              <option value="#cccccc">Light Gray</option>
+              <option value="#ffffff">White</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label for="pageNumOffset">Offset (mm)</label>
+            <input type="number" id="pageNumOffset" value="2" min="0" max="50" step="0.5" data-unit="mm">
+          </div>
+        </div>
+      </div>
+
+      <!-- Output Quality -->
+      <div class="panel">
+        <div class="panel-title">Output Quality <span class="help" tabindex="0" data-tip="PDF pages are rendered at this DPI. Images keep their own resolution.">?</span></div>
+        <div class="row">
+          <div class="control-group">
+            <label for="outputDpi">PDF Render DPI</label>
+            <input type="number" id="outputDpi" value="300" min="72" max="1200" step="1">
+          </div>
+          <div class="control-group">
+            <label for="imageFormat">Image Encoding</label>
+            <select id="imageFormat">
+              <option value="jpeg">JPEG (smaller)</option>
+              <option value="png">PNG (lossless)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="button-group">
+        <button class="btn btn-success" id="downloadBtn" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+          Download PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- Preview Area -->
+    <div class="main">
+      <div class="preview-canvas-container" id="previewArea">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-state-icon">📄</div>
+          <p>Add images or PDFs to see a live preview</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="loading-overlay hidden" id="loading">
+  <div class="spinner"></div>
+  <p id="loadingText">Processing...</p>
+</div>
+
+<script src="shared/pnp-shared.js"></script>
+<script src="js/files.js"></script>
+<script src="js/thumbnails.js"></script>
+<script src="js/geometry.js"></script>
+<script src="js/preview.js"></script>
+<script src="js/export.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

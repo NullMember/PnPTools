@@ -1,0 +1,113 @@
+/* PnPBooklet-only styles. The shared base lives in style.css (synced from the hub). */
+
+/* ---- Additive: PnPBooklet sheet-preview wrapper ------------------------- */
+/* Not part of the shared component set above; a plain white "sheet" card
+   used to frame the single generated preview canvas, floating on the dark
+   .preview-canvas-container background (pages are white in the final PDF). */
+
+.preview-page {
+    background: #fff;
+    box-shadow: 0 4px 24px var(--shadow);
+    border-radius: 4px;
+}
+
+.preview-page canvas {
+    display: block;
+    box-shadow: none;
+    background: none;
+}
+
+/* ---- PnPBooklet: page strip, preview navigation --------------------------- */
+
+.panel[hidden] {
+    display: none;
+}
+
+.page-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.page-thumb {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    cursor: grab;
+}
+
+.page-thumb.dragging {
+    opacity: 0.4;
+}
+
+.page-thumb.drop-target {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.page-thumb canvas {
+    display: block;
+    background: #fff;
+}
+
+.page-thumb-num {
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    margin-top: 2px;
+}
+
+.page-thumb-actions {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: none;
+    gap: 2px;
+}
+
+.page-thumb:hover .page-thumb-actions,
+.page-thumb:focus-within .page-thumb-actions {
+    display: flex;
+}
+
+.page-thumb-actions button {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    background: rgba(15, 17, 23, 0.85);
+    color: var(--text);
+}
+
+.page-thumb-actions button:hover {
+    background: var(--accent);
+}
+
+.preview-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
+.preview-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+}
+
+.preview-nav .btn-small {
+    padding: 4px 12px;
+    font-size: 1rem;
+}
