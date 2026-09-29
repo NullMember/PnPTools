@@ -5,8 +5,35 @@
 const fs = require('node:fs');
 const base = require('@playwright/test');
 
+// CDN libraries are pinned versions, so a copy fetched once serves every
+// later test from disk (tests/.cdn-cache): a slow or stalled CDN request
+// can't time a test out.
+const path = require('node:path');
+const crypto = require('node:crypto');
+const CDN_CACHE = path.join(__dirname, '.cdn-cache');
+
+async function serveCdnFromCache(page) {
+  await page.route('https://cdnjs.cloudflare.com/**', async (route) => {
+    const url = route.request().url();
+    const file = path.join(CDN_CACHE, crypto.createHash('sha1').update(url).digest('hex'));
+    if (fs.existsSync(file)) {
+      const meta = JSON.parse(fs.readFileSync(`${file}.json`, 'utf8'));
+      await route.fulfill({ status: 200, contentType: meta.type, headers: { 'access-control-allow-origin': '*' }, body: fs.readFileSync(file) });
+      return;
+    }
+    const response = await route.fetch();
+    if (response.ok()) {
+      fs.mkdirSync(CDN_CACHE, { recursive: true });
+      fs.writeFileSync(file, await response.body());
+      fs.writeFileSync(`${file}.json`, JSON.stringify({ type: response.headers()['content-type'] || 'application/javascript' }));
+    }
+    await route.fulfill({ response });
+  });
+}
+
 const test = base.test.extend({
   page: async ({ page }, use) => {
+    await serveCdnFromCache(page);
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
