@@ -409,3 +409,15 @@ test('back pages get crop marks mirrored like the backs', async ({ page }) => {
   });
   expect(drawn).toBe(true);
 });
+
+test('zoom resizes the sheet previews', async ({ page }) => {
+  await page.setInputFiles('#imageInput', await card(page, 300));
+  await expect(status(page)).toContainText('1 piece(s)');
+  const width = () => page.locator('#sheetGrid canvas').first().evaluate((c) => c.getBoundingClientRect().width);
+  const before = await width();
+  await page.locator('#sheetZoom').fill('200');
+  await expect(page.locator('#sheetZoomValue')).toHaveText('200%');
+  expect(await width()).toBeCloseTo(before * 2, 0);
+  const fits = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+  expect(fits).toBe(true); // the sheets scroll, not the page
+});
