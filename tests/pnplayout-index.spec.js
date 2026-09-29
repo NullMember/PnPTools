@@ -126,11 +126,11 @@ test.describe('grid mode', () => {
     await setMode(page, 'grid');
     await page.setInputFiles('#imageInput', await card(page, 300));
     await expect(status(page)).toContainText('3 × 3 per sheet');
-    // First cut at x = 8.5 mm; the grid starts at y = 14.5 mm, bleed 1 mm, marks 1 mm further out.
-    const marks = await page.evaluate(() => cropMarks(state.layout.grid, readSettings().paper, readSettings().bleed));
+    // First cut at x = 8.5 mm; the grid starts at y = 14.5 mm, marks 1 mm further out.
+    const marks = await page.evaluate(() => cropMarks(state.layout.grid, readSettings().paper, readSettings().reach));
     expect(marks).toHaveLength(24); // 6 vertical cut lines × 2 + 6 horizontal × 2
     const mark = marks.find(([x1, y1]) => x1 === 8.5 && y1 < 20);
-    [8.5, 7.5, 8.5, 12.5].forEach((v, i) => expect(mark[i]).toBeCloseTo(v, 1));
+    [8.5, 8.5, 8.5, 13.5].forEach((v, i) => expect(mark[i]).toBeCloseTo(v, 1));
     expect(await darkAt(page, 8.5, 10)).toBe(true);
     await page.uncheck('#cropMarks');
     await expect.poll(() => darkAt(page, 8.5, 10)).toBe(false);
@@ -160,7 +160,6 @@ test.describe('grid mode', () => {
 test.describe('images that already include bleed', () => {
   const piece = (page) => page.evaluate(() => {
     const p = [...state.pieces.values()][0];
-    const s = readSettings();
     const outline = outlineOnSheet(p, { cx: 0, cy: 0, angle: 0 });
     const xs = outline.map(([x]) => x), ys = outline.map(([, y]) => y);
     return {
@@ -168,12 +167,11 @@ test.describe('images that already include bleed', () => {
       heightMm: pieceHeightMm(p),
       cutW: Math.max(...xs) - Math.min(...xs),
       cutH: Math.max(...ys) - Math.min(...ys),
-      printedExtra: faceComposite(p, p.front, s.bleed).extraMm,
+      printedExtra: faceComposite(p, p.front).extraMm,
     };
   });
 
   test('the card inside the bleed sets the size and the cut line', async ({ page }) => {
-    await page.fill('#bleed__display', '0');
     await page.setInputFiles('#imageInput', await card(page, 300, { bleed: 3 }));
     await expect(status(page)).toContainText('1 piece(s)');
     expect((await piece(page)).widthMm).toBeCloseTo(69, 0); // the whole image
@@ -189,7 +187,6 @@ test.describe('images that already include bleed', () => {
   });
 
   test('pieces added later are trimmed too, and grid gaps leave room for the bleed', async ({ page }) => {
-    await page.fill('#bleed__display', '0');
     await page.fill('#spacing__display', '0');
     await page.fill('#imageBleed__display', '3');
     await page.press('#imageBleed__display', 'Tab');
@@ -198,7 +195,7 @@ test.describe('images that already include bleed', () => {
     await expect(status(page)).toContainText('1 piece(s)');
     expect((await piece(page)).widthMm).toBeCloseTo(63, 0);
     const grid = await page.evaluate(() => state.layout.grid);
-    expect(grid.gap).toBeCloseTo(3, 5); // bleed of one card may reach the next card's cut, no further
+    expect(grid.gap).toBeCloseTo(3, 1); // bleed of one card may reach the next card's cut, no further
   });
 });
 
@@ -439,4 +436,65 @@ test('pieces sit side by side in one row that scrolls sideways', async ({ page }
     };
   });
   expect(layout).toEqual({ oneRow: true, scrolls: true, pageFits: true });
+});
+
+test.describe('bleed comes from Bleed', () => {
+  test('Layout has no bleed setting of its own, and sends pieces to Bleed', async ({ page, context }) => {
+    await expect(page.locator('#bleed')).toHaveCount(0);
+    await page.setInputFiles('#imageInput', [await card(page, 300, { name: 'Ace.png' })]);
+    await expect(rows(page)).toHaveCount(1);
+    const [bleedPage] = await Promise.all([
+      context.waitForEvent('page'),
+      page.locator('#sendSlot').getByRole('button', { name: /Bleed/ }).click(),
+    ]);
+    await expect(bleedPage.locator('#thumbnailsContainer .thumbnail')).toHaveCount(1);
+    await expect(bleedPage.locator('#thumbnailsContainer .thumbnail')).toHaveAttribute('title', 'Ace.png');
+  });
+
+  // Images made by Bleed, taken back into Layout.
+  async function fromBleed(page, mode, file) {
+    await page.goto('PnPBleed/index.html');
+    await page.selectOption('#bleedMode', mode);
+    await page.fill('#bleedInput__display', '3');
+    await page.setInputFiles('#imageInput', [file]);
+    await expect(page.locator('#downloadBtn')).toBeEnabled();
+    const out = await download(page, () => page.click('#downloadBtn'));
+    await page.goto('PnPLayout/index.html');
+    await page.setInputFiles('#imageInput', out.path);
+    await expect(status(page)).toContainText('1 piece(s)');
+  }
+
+  test('a card from Bleed is laid out at its card size, bleed printed around it', async ({ page }) => {
+    await fromBleed(page, 'extend', await card(page, 300));
+    const p = await page.evaluate(() => { const p = [...state.pieces.values()][0]; return { w: p.widthMm, h: pieceHeightMm(p), extra: faceComposite(p, p.front).extraMm }; });
+    expect(p.w).toBeCloseTo(63, 0);
+    expect(p.h).toBeCloseTo(88, 0);
+    expect(p.extra).toBeCloseTo(3, 1);
+  });
+
+  test('a shape from Bleed is cut along its own outline', async ({ page }) => {
+    const b64 = await page.evaluate(async () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 472; // a 40 mm disc at 300 DPI
+      const g = c.getContext('2d');
+      g.fillStyle = '#22aa44';
+      g.beginPath(); g.arc(236, 236, 236, 0, Math.PI * 2); g.fill();
+      const blob = await PnP.setImageDpi(await PnP.canvasToBlob(c), 300);
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      let s = '';
+      bytes.forEach((b) => { s += String.fromCharCode(b); });
+      return btoa(s);
+    });
+    await fromBleed(page, 'shape', { name: 'Coin.png', mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') });
+    const cut = await page.evaluate(() => {
+      const p = [...state.pieces.values()][0];
+      const o = outlineOnSheet(p, { cx: 0, cy: 0, angle: 0 });
+      const r = o.map(([x, y]) => Math.hypot(x, y));
+      return { w: p.widthMm, rMin: Math.min(...r), rMax: Math.max(...r), rect: p.front.isRect };
+    });
+    expect(cut.w).toBeCloseTo(40, 0);
+    expect(cut.rect).toBe(false);
+    expect(cut.rMin).toBeGreaterThan(19); // a circle of radius 20 mm, not the bled 23 mm disc
+    expect(cut.rMax).toBeLessThan(21);
+  });
 });

@@ -63,3 +63,57 @@ test('opening a project replaces the cards', async ({ page }) => {
   await expect(thumbs(page)).toHaveCount(1);
   await expect(thumbs(page).first()).toHaveAttribute('title', 'Sticker.png');
 });
+
+// A round token (transparent around a 40 mm disc) at 300 DPI, DPI recorded.
+async function token(page, name = 'Token.png') {
+  const b64 = await page.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 472; // 40 mm at 300 DPI
+    const g = c.getContext('2d');
+    g.fillStyle = '#22aa44';
+    g.beginPath(); g.arc(236, 236, 236, 0, Math.PI * 2); g.fill();
+    const blob = await PnP.setImageDpi(await PnP.canvasToBlob(c), 300);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let s = '';
+    bytes.forEach((b) => { s += String.fromCharCode(b); });
+    return btoa(s);
+  });
+  return { name, mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') };
+}
+
+test('"Follow the shape" puts bleed around a transparent shape, by its DPI', async ({ page }) => {
+  await page.selectOption('#bleedMode', 'shape');
+  await page.fill('#bleedInput__display', '2');
+  await page.setInputFiles('#imageInput', [await token(page)]);
+  await expect(page.locator('#downloadBtn')).toBeEnabled();
+  const out = await download(page, () => page.click('#downloadBtn'));
+  const info = await page.evaluate(async (bytes) => {
+    const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' });
+    const bmp = await createImageBitmap(blob);
+    const c = document.createElement('canvas');
+    c.width = bmp.width; c.height = bmp.height;
+    const g = c.getContext('2d');
+    g.drawImage(bmp, 0, 0);
+    const px = (x, y) => [...g.getImageData(x, y, 1, 1).data];
+    const mid = bmp.width / 2;
+    return {
+      size: bmp.width,
+      corner: px(2, 2)[3], // far outside the disc: still transparent
+      ring: px(Math.round(mid), 10), // inside the bleed ring above the disc
+      note: await PnP.readPngText(blob, 'PnPTools:bleed'),
+    };
+  }, [...fs.readFileSync(out.path)]);
+  expect(info.size).toBe(472 + 2 * 24); // 2 mm at 300 DPI = 24 px each side
+  expect(info.corner).toBe(0);
+  expect(info.ring).toEqual([34, 170, 68, 255]); // the disc's colour, opaque
+  expect(parseFloat(info.note)).toBeCloseTo(2, 1);
+});
+
+test('card outputs record the bleed they were given', async ({ page }) => {
+  const img = await makeCardImages(page);
+  await page.setInputFiles('#imageInput', [img.opaque]);
+  await expect(page.locator('#downloadBtn')).toBeEnabled();
+  const out = await download(page, () => page.click('#downloadBtn'));
+  const note = await page.evaluate((bytes) => PnP.readPngText(new Blob([new Uint8Array(bytes)]), 'PnPTools:bleed'), [...fs.readFileSync(out.path)]);
+  expect(parseFloat(note)).toBeCloseTo(2, 1); // the default 2 mm
+});
