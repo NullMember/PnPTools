@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Card Line Art Editor</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/tool.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="shared/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#1a1d27">
+<script src="shared/pnp-theme.js"></script>
+<link rel="stylesheet" href="shared/pnp-shared.css">
+<link rel="stylesheet" href="shared/pnp-editor.css">
+</head>
+<body class="editor-page">
+<div class="container">
+
+  <header>
+    <h1>Card Line Art Editor</h1>
+    <p class="subtitle">Draw cut, score and emboss lines on a card and export them as SVG.</p>
+    <nav class="tool-nav">
+      <a class="nav-link" href="index.html">&larr; Grid tool</a>
+      <a class="nav-link current" href="editor.html">Card editor</a>
+      <a class="nav-link" href="sheet.html">Sheet assembler &rarr;</a>
+    </nav>
+  </header>
+
+  <div class="content with-gallery">
+    <div class="sidebar">
+
+      <div class="panel">
+        <div class="panel-title">Cards <span class="help" tabindex="0" data-tip="Cards in a project share one size. The eye shows or hides a card's reference image, which is never exported. Drop an image on a card to set it.">?</span></div>
+        <div class="dropzone dropzone-compact" id="cardImageDrop">
+          <div class="dz-title">Drop card images here</div>
+          <div>each image becomes a card &middot; or click to browse</div>
+          <input type="file" id="cardImageInput" accept="image/*" multiple hidden>
+        </div>
+        <div id="cardList" class="card-list"></div>
+        <input type="file" id="imageInput" accept="image/*" hidden>
+        <div class="control-group">
+          <label for="cardName">Card name</label>
+          <input type="text" id="cardName" data-persist="false" autocomplete="off">
+        </div>
+        <div class="button-row">
+          <button type="button" id="addCardBtn" class="btn-secondary btn-small">New card</button>
+          <button type="button" id="dupCardBtn" class="btn-secondary btn-small">Duplicate</button>
+          <button type="button" id="deleteCardBtn" class="btn-secondary btn-small danger">Delete</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Card Size <span class="help" tabindex="0" data-tip="Every card in the project has this size.">?</span></div>
+        <div class="control-group">
+          <label for="cardPreset">Preset</label>
+          <select id="cardPreset"></select>
+        </div>
+        <div class="row">
+          <div class="control-group">
+            <label for="cardW">Width (mm)</label>
+            <input type="number" id="cardW" data-unit="mm" value="63" min="1" step="0.1" required>
+          </div>
+          <div class="control-group">
+            <label for="cardH">Height (mm)</label>
+            <input type="number" id="cardH" data-unit="mm" value="88" min="1" step="0.1" required>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Canvas</div>
+        <div class="input-hint">V select &middot; A nodes &middot; L line &middot; R rect &middot; E ellipse &middot; P pen &middot; F freehand &middot; T trace &middot; G grid &middot; S snap &middot; drag from a ruler for a guide &middot; Ctrl/Cmd+scroll to zoom, Space-drag to pan.</div>
+        <div id="editorOptions" class="editor-options"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Templates</div>
+        <div class="control-group">
+          <label for="templateSelect">Add a starting shape</label>
+          <select id="templateSelect">
+            <option value="outline">Card outline, rounded corners (cut)</option>
+            <option value="round">Round token (cut)</option>
+            <option value="hex">Hex token (cut)</option>
+            <option value="foldMiddle">Fold-over card: centre fold (score)</option>
+            <option value="standee">Standee: outline + fold-under base (cut + score)</option>
+          </select>
+        </div>
+        <div class="button-row">
+          <button type="button" id="addTemplateBtn" class="btn-secondary btn-small">Add to this card</button>
+          <button type="button" id="addTemplateAllBtn" class="btn-secondary btn-small">Add to every card</button>
+        </div>
+        <div class="input-hint">The sheet assembler uses a card's cut lines as its outline.</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Project <span class="help" tabindex="0" data-tip="Save project (.json) is what the sheet assembler opens. Open in sheet assembler sends every card there.">?</span></div>
+        <div class="button-group">
+          <button type="button" id="saveProjectBtn" class="btn-secondary">Save project (.json)</button>
+          <button type="button" id="openSheetBtn" class="btn-primary">Open in sheet assembler</button>
+        </div>
+        <div class="dropzone dropzone-compact" id="projectDrop">
+          <div class="dz-title">Drop a project .json here</div>
+          <div>or click to browse</div>
+          <input type="file" id="loadProjectInput" accept="application/json,.json" hidden>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Export SVG</div>
+        <div class="control-group">
+          <label class="inline"><input type="checkbox" id="mirrorExport"> Mirror horizontally (for back-side score/emboss)</label>
+        </div>
+        <div class="button-group">
+          <button type="button" id="exportAllBtn" class="btn-primary">Export all layers</button>
+          <button type="button" id="exportCutBtn" class="btn-secondary">Export Cut only</button>
+          <button type="button" id="exportScoreBtn" class="btn-secondary">Export Score/Fold only</button>
+          <button type="button" id="exportEmbossBtn" class="btn-secondary">Export Emboss only</button>
+          <button type="button" id="exportCardsBtn" class="btn-secondary">Export every card (.zip)</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="main">
+      <div id="editorStage" class="editor-stage"></div>
+    </div>
+
+    <div class="gallery-sidebar">
+      <div class="panel">
+        <div class="panel-title">Properties</div>
+        <div id="editorProps"></div>
+        <p class="input-hint">Reference image is never exported.</p>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script src="shared/pnp-shared.js"></script>
+<script src="shared/pathgeom.js"></script>
+<script src="shared/raster.js"></script>
+<script src="shared/pnp-editor.js"></script>
+<script src="js/editor.js"></script>
+</body>
+</html>

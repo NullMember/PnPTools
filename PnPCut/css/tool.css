@@ -1,0 +1,266 @@
+/* PnPCut-only styles. The shared base lives in style.css (synced from the hub). */
+
+/* Overrides of shared rules: the editor fills the viewport height. */
+
+.content {
+    grid-template-rows: minmax(0, 1fr);
+}
+
+.sidebar,
+.gallery-sidebar,
+.main {
+    min-height: 0;
+}
+
+/* Grid tool and sheet assembler styles. The card editor uses shared/pnp-editor.css. */
+
+.summary {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+
+/* ---- SVG preview (grid tool / sheet assembler) ---------------------------- */
+
+.svg-wrap {
+    background:
+        linear-gradient(45deg, var(--checker) 25%, transparent 25%),
+        linear-gradient(-45deg, var(--checker) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, var(--checker) 75%),
+        linear-gradient(-45deg, transparent 75%, var(--checker) 75%);
+    background-color: var(--surface);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.svg-wrap svg {
+    height: auto;
+    max-width: 100%;
+    background: #ffffff;
+    box-shadow: 0 4px 24px var(--shadow);
+}
+
+/* On screen only: the files keep their hairline (mm) strokes for the
+   cutting machine, which would render well under a pixel wide here. */
+.svg-wrap svg [stroke] {
+    vector-effect: non-scaling-stroke;
+    stroke-width: 1.5px;
+}
+
+/* ---- Sheet assembler: project list & cell assignment ---------------------- */
+
+.project-list,
+.cell-assignment {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.project-row,
+.cell-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+}
+
+.project-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+}
+
+.project-size {
+    color: var(--text-dim);
+    flex: 0 0 auto;
+    font-size: 11px;
+}
+
+.project-row.mismatch .project-size {
+    color: var(--danger);
+}
+
+.remove-btn {
+    border: none;
+    background: none;
+    color: var(--text-dim);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.remove-btn:hover {
+    color: var(--danger);
+}
+
+.cell-label {
+    flex: 0 0 auto;
+    width: 66px;
+    color: var(--text-dim);
+    font-size: 11px;
+}
+
+.cell-row select {
+    flex: 1 1 auto;
+    padding: 4px 6px;
+    font-size: 12px;
+}
+
+.fill-all-row {
+    display: flex;
+    gap: 6px;
+}
+
+.fill-all-row select {
+    flex: 1 1 auto;
+}
+
+.fill-all-row button {
+    flex: 0 0 auto;
+}
+
+/* ---- Card editor: card list ------------------------------------------------ */
+
+.button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 10px 0;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.card-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-right: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+}
+
+.card-item:hover,
+.card-item.dragover {
+    border-color: var(--accent);
+    background: var(--surface2);
+}
+
+.card-item.current {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.card-select {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    align-items: center;
+    padding: 6px 8px;
+    text-align: left;
+    background: none;
+    border: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.card-actions {
+    display: flex;
+    gap: 2px;
+    flex: none;
+}
+
+.card-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    color: var(--text-dim);
+    cursor: pointer;
+}
+
+.card-action:hover {
+    color: var(--accent);
+    border-color: var(--border);
+}
+
+.card-action.card-eye {
+    color: var(--accent);
+}
+
+.card-action.danger:hover {
+    color: var(--danger);
+}
+
+.card-thumb {
+    grid-row: span 2;
+    width: 36px;
+    height: 44px;
+    background: #fff;
+    border-radius: 3px;
+}
+
+.card-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.card-count {
+    color: var(--text-dim);
+    font-size: 11px;
+}
+
+/* ---- Sheet assembler: pages ------------------------------------------------ */
+
+.page-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.page-label {
+    flex: 1;
+    text-align: center;
+    font-size: 13px;
+}
+
+.project-cards {
+    color: var(--text-dim);
+    flex: 0 0 auto;
+    font-size: 11px;
+}

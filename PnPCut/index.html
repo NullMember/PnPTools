@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Print &amp; Cut Card Grid Generator</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/tool.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="shared/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#1a1d27">
+<script src="shared/pnp-theme.js"></script>
+<link rel="stylesheet" href="shared/pnp-shared.css">
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Print &amp; Cut Card Grid Generator</h1>
+    <p class="subtitle">A cut file for a card grid printed elsewhere, like a publisher's PnP sheet.</p>
+    <nav class="tool-nav">
+      <a class="nav-link current" href="index.html">Grid tool</a>
+      <a class="nav-link" href="editor.html">Card editor &rarr;</a>
+      <a class="nav-link" href="sheet.html">Sheet assembler &rarr;</a>
+    </nav>
+  </header>
+
+  <div class="content">
+    <div class="sidebar">
+      <form id="form">
+
+        <div class="panel">
+          <div class="panel-title">Card</div>
+          <div class="control-group">
+            <label for="cardPreset">Preset</label>
+            <select id="cardPreset"></select>
+          </div>
+          <div class="row">
+            <div class="control-group">
+              <label for="cardW">Width (mm)</label>
+              <input type="number" id="cardW" data-unit="mm" value="63" min="1" step="0.1" required>
+            </div>
+            <div class="control-group">
+              <label for="cardH">Height (mm)</label>
+              <input type="number" id="cardH" data-unit="mm" value="88" min="1" step="0.1" required>
+            </div>
+          </div>
+          <div class="control-group">
+            <label for="radius">Corner radius (mm)</label>
+            <input type="number" id="radius" data-unit="mm" value="3" min="0" step="0.1" required>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Bleed &amp; Spacing <span class="help" tabindex="0" data-tip="Gap and edge margin follow the bleed until you change them.">?</span></div>
+          <div class="control-group">
+            <label for="bleed">Bleed per card (mm)</label>
+            <input type="number" id="bleed" data-unit="mm" value="2" min="0" step="0.1" required>
+          </div>
+          <div class="control-group">
+            <label for="gap">Gap between cards (mm)</label>
+            <input type="number" id="gap" data-unit="mm" value="4" min="0" step="0.1" required>
+          </div>
+          <div class="control-group">
+            <label for="edgeMargin">Gap from guide edge to nearest card (mm)</label>
+            <input type="number" id="edgeMargin" data-unit="mm" value="2" min="0" step="0.1" required>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Paper</div>
+          <div class="control-group">
+            <label for="paperPreset">Preset</label>
+            <select id="paperPreset">
+              <option value="a4">A4 (210 &times; 297 mm)</option>
+              <option value="letter">US Letter (215.9 &times; 279.4 mm)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div class="row">
+            <div class="control-group">
+              <label for="paperW">Width (mm)</label>
+              <input type="number" id="paperW" data-unit="mm" value="210" min="1" step="0.1" required>
+            </div>
+            <div class="control-group">
+              <label for="paperH">Height (mm)</label>
+              <input type="number" id="paperH" data-unit="mm" value="297" min="1" step="0.1" required>
+            </div>
+          </div>
+          <div class="control-group">
+            <label class="inline"><input type="checkbox" id="landscape"> Landscape</label>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Cutting Machine <span class="help" tabindex="0" data-tip="The mat edge your machine can't cut (Cricut: 6.35 mm).">?</span></div>
+          <div class="control-group">
+            <label for="machinePreset">Machine</label>
+            <select id="machinePreset"></select>
+          </div>
+          <div class="control-group">
+            <label for="machineMargin">Mat dead margin (mm)</label>
+            <input type="number" id="machineMargin" data-unit="mm" value="6.35" min="0" step="0.01" required>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Grid <span class="help" tabindex="0" data-tip="Auto-fit fits as many as possible. Turn it off to set columns and rows.">?</span></div>
+          <div class="control-group">
+            <label class="inline"><input type="checkbox" id="autoFit" checked> Auto-fit maximum grid</label>
+          </div>
+          <div class="row">
+            <div class="control-group">
+              <label for="cols">Columns</label>
+              <input type="number" id="cols" value="1" min="1" step="1" required disabled>
+            </div>
+            <div class="control-group">
+              <label for="rowsInput">Rows</label>
+              <input type="number" id="rowsInput" value="1" min="1" step="1" required disabled>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">Cut Registration <span class="help" tabindex="0" data-tip="If cuts land off the print, shift them by this much (+ is right / down). Measure with the test sheet.">?</span></div>
+          <div class="row">
+            <div class="control-group">
+              <label for="cutOffsetX">Move cuts X (mm)</label>
+              <input type="number" id="cutOffsetX" value="0" step="0.1" data-unit="mm">
+            </div>
+            <div class="control-group">
+              <label for="cutOffsetY">Move cuts Y (mm)</label>
+              <input type="number" id="cutOffsetY" value="0" step="0.1" data-unit="mm">
+            </div>
+          </div>
+          <button type="button" id="registrationTestBtn" class="btn-secondary btn-small">Download registration test sheet</button>
+          <div class="input-hint">Print and cut the test sheet. If cuts land 0.5 mm right of the squares, enter −0.5 for X.</div>
+        </div>
+
+        <div id="warning" class="status error" hidden></div>
+
+        <div class="button-group">
+          <button type="button" id="downloadBtn" class="btn-primary">Download SVG</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="main">
+      <div class="preview-section">
+        <div class="preview-title">Preview</div>
+        <div id="summary" class="summary"></div>
+        <div id="svgWrap" class="svg-wrap"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="shared/pnp-shared.js"></script>
+<script src="js/grid-math.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

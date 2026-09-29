@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sheet Assembler</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/tool.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="shared/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#1a1d27">
+<script src="shared/pnp-theme.js"></script>
+<link rel="stylesheet" href="shared/pnp-shared.css">
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Sheet Assembler</h1>
+    <p class="subtitle">Put card editor designs on full sheets, one SVG per page.</p>
+    <nav class="tool-nav">
+      <a class="nav-link" href="index.html">&larr; Grid tool</a>
+      <a class="nav-link" href="editor.html">&larr; Card editor</a>
+      <a class="nav-link current" href="sheet.html">Sheet assembler</a>
+    </nav>
+  </header>
+
+  <div class="content with-gallery">
+    <div class="sidebar">
+
+      <div class="panel">
+        <div class="panel-title">Card <span class="help" tabindex="0" data-tip="Use your projects' card size. Projects of another size are marked ⚠ and scaled.">?</span></div>
+        <div class="control-group">
+          <label for="cardPreset">Preset</label>
+          <select id="cardPreset"></select>
+        </div>
+        <div class="row">
+          <div class="control-group">
+            <label for="cardW">Width (mm)</label>
+            <input type="number" id="cardW" data-unit="mm" value="63" min="1" step="0.1" required>
+          </div>
+          <div class="control-group">
+            <label for="cardH">Height (mm)</label>
+            <input type="number" id="cardH" data-unit="mm" value="88" min="1" step="0.1" required>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Outline Cut <span class="help" tabindex="0" data-tip="The cut around each card. A card's own cut lines are always included.">?</span></div>
+        <div class="control-group">
+          <label for="outlineMode">Cut around each card</label>
+          <select id="outlineMode">
+            <option value="auto">Card's own Cut lines, else a rounded rectangle</option>
+            <option value="rect">Rounded rectangle on every card</option>
+            <option value="none">No outline (only the cards' own Cut lines)</option>
+          </select>
+        </div>
+        <div class="control-group" id="radiusGroup">
+          <label for="radius">Corner radius (mm)</label>
+          <input type="number" id="radius" data-unit="mm" value="3" min="0" step="0.1" required>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Bleed &amp; Spacing <span class="help" tabindex="0" data-tip="Use the grid tool's values. Gap and edge margin follow the bleed until you change them.">?</span></div>
+        <div class="control-group">
+          <label for="bleed">Bleed per card (mm)</label>
+          <input type="number" id="bleed" data-unit="mm" value="2" min="0" step="0.1" required>
+        </div>
+        <div class="control-group">
+          <label for="gap">Gap between cards (mm)</label>
+          <input type="number" id="gap" data-unit="mm" value="4" min="0" step="0.1" required>
+        </div>
+        <div class="control-group">
+          <label for="edgeMargin">Gap from guide edge to nearest card (mm)</label>
+          <input type="number" id="edgeMargin" data-unit="mm" value="2" min="0" step="0.1" required>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Paper</div>
+        <div class="control-group">
+          <label for="paperPreset">Preset</label>
+          <select id="paperPreset">
+            <option value="a4">A4 (210 &times; 297 mm)</option>
+            <option value="letter">US Letter (215.9 &times; 279.4 mm)</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="row">
+          <div class="control-group">
+            <label for="paperW">Width (mm)</label>
+            <input type="number" id="paperW" data-unit="mm" value="210" min="1" step="0.1" required>
+          </div>
+          <div class="control-group">
+            <label for="paperH">Height (mm)</label>
+            <input type="number" id="paperH" data-unit="mm" value="297" min="1" step="0.1" required>
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="inline"><input type="checkbox" id="landscape"> Landscape</label>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Cutting Machine <span class="help" tabindex="0" data-tip="The mat edge your machine can't cut (Cricut: 6.35 mm).">?</span></div>
+        <div class="control-group">
+          <label for="machinePreset">Machine</label>
+          <select id="machinePreset"></select>
+        </div>
+        <div class="control-group">
+          <label for="machineMargin">Mat dead margin (mm)</label>
+          <input type="number" id="machineMargin" data-unit="mm" value="6.35" min="0" step="0.01" required>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Grid <span class="help" tabindex="0" data-tip="Auto-fit fits as many as possible. Turn it off to set columns and rows.">?</span></div>
+        <div class="control-group">
+          <label class="inline"><input type="checkbox" id="autoFit" checked> Auto-fit maximum grid</label>
+        </div>
+        <div class="row">
+          <div class="control-group">
+            <label for="cols">Columns</label>
+            <input type="number" id="cols" value="1" min="1" step="1" required disabled>
+          </div>
+          <div class="control-group">
+            <label for="rowsInput">Rows</label>
+            <input type="number" id="rowsInput" value="1" min="1" step="1" required disabled>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Cut Registration <span class="help" tabindex="0" data-tip="If cuts land off the print, shift them by this much (+ is right / down). Measure with the test sheet.">?</span></div>
+        <div class="row">
+          <div class="control-group">
+            <label for="cutOffsetX">Move cuts X (mm)</label>
+            <input type="number" id="cutOffsetX" value="0" step="0.1" data-unit="mm">
+          </div>
+          <div class="control-group">
+            <label for="cutOffsetY">Move cuts Y (mm)</label>
+            <input type="number" id="cutOffsetY" value="0" step="0.1" data-unit="mm">
+          </div>
+        </div>
+      </div>
+
+      <div id="warning" class="status error" hidden></div>
+    </div>
+
+    <div class="main">
+      <div class="svg-wrap" id="canvasWrap"></div>
+    </div>
+
+    <div class="gallery-sidebar">
+      <div class="panel">
+        <div class="panel-title">Card Projects <span class="help" tabindex="0" data-tip="Add projects saved from the card editor, then pick a card for each cell.">?</span></div>
+        <div class="dropzone dropzone-compact" id="projectDrop">
+          <div class="dz-title">Drop card projects (.json) here</div>
+          <div>or click to browse</div>
+          <input type="file" id="projectInput" accept="application/json,.json" multiple hidden>
+        </div>
+        <div id="projectList" class="project-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Pages</div>
+        <div class="page-nav">
+          <button type="button" id="prevPageBtn" class="btn-secondary btn-small" title="Previous page" aria-label="Previous page">&lsaquo;</button>
+          <span id="pageLabel" class="page-label">Page 1 of 1</span>
+          <button type="button" id="nextPageBtn" class="btn-secondary btn-small" title="Next page" aria-label="Next page">&rsaquo;</button>
+        </div>
+        <div class="button-row">
+          <button type="button" id="addPageBtn" class="btn-secondary btn-small">New page</button>
+          <button type="button" id="dupPageBtn" class="btn-secondary btn-small">Duplicate</button>
+          <button type="button" id="deletePageBtn" class="btn-secondary btn-small">Delete</button>
+        </div>
+        <button type="button" id="placeAllBtn" class="btn-secondary btn-small" hidden>Place every card once</button>
+        <div class="input-hint" id="placeAllHint" hidden>Places every unused card, adding pages as needed.</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Cell Assignment <span class="help" tabindex="0" data-tip="Cell 1,1 is top left. Empty cells get only the outline cut.">?</span></div>
+        <div id="cellAssignment" class="cell-assignment"></div>
+        <div class="fill-all-row" id="fillAllRow" hidden>
+          <select id="fillAllSelect"></select>
+          <button type="button" id="fillAllBtn" class="btn-secondary">Fill empty cells</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Export</div>
+        <div class="control-group">
+          <label class="inline"><input type="checkbox" id="mirrorSheet"> Mirror whole sheet (for back-side pass)</label>
+        </div>
+        <div class="control-group" id="exportPagesGroup" hidden>
+          <label for="exportPages">Pages</label>
+          <select id="exportPages">
+            <option value="all">Every page (.zip, one SVG per page)</option>
+            <option value="current">This page only</option>
+          </select>
+        </div>
+        <div class="button-group">
+          <button type="button" id="exportAllBtn" class="btn-primary">Export all layers</button>
+          <button type="button" id="exportCutBtn" class="btn-secondary">Export Cut only</button>
+          <button type="button" id="exportScoreBtn" class="btn-secondary">Export Score/Fold only</button>
+          <button type="button" id="exportEmbossBtn" class="btn-secondary">Export Emboss only</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+<script src="shared/pnp-shared.js"></script>
+<script src="shared/pathgeom.js"></script>
+<script src="js/grid-math.js"></script>
+<script src="js/sheet.js"></script>
+</body>
+</html>
