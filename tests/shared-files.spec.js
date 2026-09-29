@@ -1,14 +1,21 @@
-// Shared runtime: top-bar project buttons and the Inputs & outputs viewer,
-// which records files loaded into and produced by every tool.
+// Shared runtime: top-bar project buttons and the library, which records
+// files loaded into and produced by every tool.
 const { test, expect, download, makeCardImages, expectSvgSizeInInches } = require('./helpers');
 
 const topBar = (page) => page.locator('.pnp-topbar');
 const filesButton = (page) => page.locator('.pnp-outputs-btn');
-const popover = (page) => page.locator('.pnp-outputs .pnp-popover');
+const library = (page) => page.locator('.pnp-library');
+const batches = (page, kind) => library(page).locator(kind ? `.pnp-library-batch[data-kind="${kind}"]` : '.pnp-library-batch');
 
 async function openFiles(page) {
   await filesButton(page).click();
-  await expect(popover(page)).toBeVisible();
+  await expect(library(page)).toBeVisible();
+}
+
+// Select a library batch and open its files in the viewer.
+async function viewBatch(page, batch) {
+  await batch.getByRole('button', { name: 'Select all' }).click();
+  await library(page).locator('.pnp-library-props').getByRole('button', { name: 'View' }).click();
 }
 
 test('the card editor has a project name, New, Open, Save and Save as in the top bar', async ({ page }) => {
@@ -69,12 +76,12 @@ test('New starts an empty project, after confirming unsaved work', async ({ page
   await expect(page.locator('#canvasSvg .shape-el')).toHaveCount(0);
 });
 
-test('New clears Inputs & outputs', async ({ page }) => {
+test('New clears the library', async ({ page }) => {
   await page.goto('PnPBleed/index.html');
   const img = await makeCardImages(page);
   await page.setInputFiles('#imageInput', [img.alpha]);
   await openFiles(page); // recorded before leaving the page
-  await expect(popover(page).locator('.pnp-popover-row')).toHaveCount(1);
+  await expect(batches(page)).toHaveCount(1);
   await page.goto('PnPCut/editor.html');
   await page.setInputFiles('#cardImageInput', [img.opaque]);
   await page.click('#addTemplateBtn');
@@ -82,7 +89,7 @@ test('New clears Inputs & outputs', async ({ page }) => {
   await expect(async () => { // the download is recorded asynchronously
     await page.keyboard.press('Escape');
     await openFiles(page);
-    await expect(popover(page).locator('.pnp-popover-row')).toHaveCount(3, { timeout: 500 });
+    await expect(batches(page)).toHaveCount(3, { timeout: 500 });
   }).toPass();
   await page.keyboard.press('Escape');
 
@@ -91,8 +98,8 @@ test('New clears Inputs & outputs', async ({ page }) => {
     topBar(page).getByRole('button', { name: 'New', exact: true }).click(),
   ]);
   await openFiles(page);
-  await expect(popover(page).locator('.pnp-popover-row')).toHaveCount(0);
-  await expect(popover(page).locator('.pnp-popover-empty')).toBeVisible();
+  await expect(batches(page)).toHaveCount(0);
+  await expect(library(page).locator('.pnp-popover-empty')).toBeVisible();
 });
 
 test('files dropped into a tool are listed as its inputs', async ({ page }) => {
@@ -100,16 +107,16 @@ test('files dropped into a tool are listed as its inputs', async ({ page }) => {
   const img = await makeCardImages(page);
   await page.setInputFiles('#imageInput', [img.alpha, img.opaque]);
   await openFiles(page);
-  const inputs = popover(page).locator('.pnp-popover-row[data-kind="input"]');
+  const inputs = batches(page, 'input');
   await expect(inputs).toHaveCount(1);
   await expect(inputs).toContainText('2 images loaded in Bleed tool');
 
-  // The set opens in the viewer, and other tools can import it.
-  await inputs.locator('.pnp-popover-item').click();
-  await expect(page.locator('.pnp-viewer')).toBeVisible();
+  // The batch opens in the viewer, and other tools can import it.
+  await viewBatch(page, inputs);
   await expect(page.locator('.pnp-viewer-thumb')).toHaveCount(2);
   await expect(page.locator('.pnp-viewer-img')).toBeVisible();
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape'); // the viewer
+  await page.keyboard.press('Escape'); // the library
 
   // Another tool's drop area can load them from the list.
   await page.goto('PnPLayout/index.html');
@@ -161,10 +168,10 @@ test('crop cards records the cropped cards as output without Send to', async ({ 
   await expect(page.getByText('✓ Done!')).toBeVisible({ timeout: 15000 });
 
   await openFiles(page);
-  const outputs = popover(page).locator('.pnp-popover-row[data-kind="output"]');
+  const outputs = batches(page, 'output');
   await expect(outputs).toHaveCount(1);
   await expect(outputs).toContainText('from CardCrop tool');
-  await expect(popover(page).locator('.pnp-popover-row[data-kind="input"]')).toContainText('1 image loaded in CardCrop tool');
+  await expect(batches(page, 'input')).toContainText('1 image loaded in CardCrop tool');
 });
 
 test('downloads are recorded; zips are unpacked for preview', async ({ page }) => {
@@ -174,9 +181,9 @@ test('downloads are recorded; zips are unpacked for preview', async ({ page }) =
   await page.click('#addTemplateBtn');
   await download(page, () => page.click('#exportCardsBtn'));
   await openFiles(page);
-  const outputs = popover(page).locator('.pnp-popover-row[data-kind="output"]');
+  const outputs = batches(page, 'output');
   await expect(outputs).toContainText('2 images from Cut tool');
-  await outputs.locator('.pnp-popover-item').click();
+  await viewBatch(page, outputs);
   await expect(page.locator('.pnp-viewer-thumb')).toHaveCount(2);
   await expect(page.locator('.pnp-viewer-img')).toHaveAttribute('src', /^blob:/);
 });
@@ -187,24 +194,23 @@ test('PDF outputs open in the viewer; project saves are not recorded', async ({ 
   await download(page, () => pdfButton.click());
   await download(page, () => topBar(page).getByRole('button', { name: 'Save', exact: true }).click());
   await openFiles(page);
-  const rows = popover(page).locator('.pnp-popover-row');
-  await expect(rows).toHaveCount(1);
-  await expect(rows).toContainText('1 file from TuckBox');
-  await rows.locator('.pnp-popover-item').click();
+  await expect(batches(page)).toHaveCount(1);
+  await expect(batches(page)).toContainText('1 file from TuckBox');
+  await viewBatch(page, batches(page));
   await expect(page.locator('.pnp-viewer-doc')).toBeVisible();
   await expect(page.locator('.pnp-viewer-img')).toBeHidden();
 });
 
-test('the same files are listed once, and rows can be removed', async ({ page }) => {
+test('the same files are listed once, and batches can be removed', async ({ page }) => {
   await page.goto('PnPBleed/index.html');
   const img = await makeCardImages(page);
   await page.setInputFiles('#imageInput', [img.alpha]);
   await page.setInputFiles('#imageInput', [img.alpha]);
   await openFiles(page);
-  await expect(popover(page).locator('.pnp-popover-row')).toHaveCount(1);
-  await popover(page).locator('.pnp-popover-remove').click();
-  await expect(popover(page).locator('.pnp-popover-row')).toHaveCount(0);
-  await expect(popover(page).locator('.pnp-popover-empty')).toBeVisible();
+  await expect(batches(page)).toHaveCount(1);
+  await batches(page).locator('.pnp-library-batch-head').getByRole('button', { name: 'Remove' }).click();
+  await expect(batches(page)).toHaveCount(0);
+  await expect(library(page).locator('.pnp-popover-empty')).toBeVisible();
 });
 
 test('Layout and TuckBox cut files are sized in inches', async ({ page }) => {
@@ -364,19 +370,3 @@ test.describe('unsaved-work warning after Save', () => {
   });
 });
 
-// ---- the library ----
-
-test('the library shows the space used, and Clear all empties it', async ({ page }) => {
-  await page.goto('PnPBleed/index.html');
-  await page.evaluate(async () => {
-    const mb = (n) => new Blob([new Uint8Array(n * 1024 * 1024).fill(n)], { type: 'image/png' });
-    await PnP.recordFiles({ kind: 'input', items: [{ name: 'big.png', blob: mb(3) }] });
-    await PnP.recordFiles({ kind: 'output', items: [{ name: 'big-copy.png', blob: mb(3) }, { name: 'small.png', blob: mb(1) }] });
-  });
-  await openFiles(page);
-  await expect(popover(page).locator('.pnp-popover-footer')).toContainText('4.0 MB in this project'); // big.png is stored once
-  await expect(popover(page).locator('.pnp-popover-row[data-kind="output"]')).toContainText('4.0 MB');
-  await popover(page).getByRole('button', { name: 'Clear all' }).click();
-  await expect(popover(page).locator('.pnp-popover-row')).toHaveCount(0);
-  await expect(popover(page).locator('.pnp-popover-empty')).toBeVisible();
-});

@@ -974,7 +974,9 @@ ${content(([x, y]) => [x - m, y - m])}
     //   pages    each tool page's work ({ key, fields, state, files }), saved as
     //            the user works and restored when the page opens
     //   info     'project' -> { name, changed, saved } (timestamps)
-    // Items and files are refs: { name, hash, type, size, role }.
+    // Items and files are refs: { name, hash, type, size, role }. Library
+    // items also have an id and meta: what the user set in the library
+    // ({ widthMm, heightMm, bleedMm, rotate, crop: { x, y, w, h }, back }).
     const store = (() => {
         const DB = 'pnptools-project';
         let dbPromise = null;
@@ -1040,7 +1042,8 @@ ${content(([x, y]) => [x - m, y - m])}
             return refs;
         }
 
-        // Refs back to { name, blob, role } items (missing blobs are left out).
+        // Refs back to { id, name, blob, role, meta } items (missing blobs are
+        // left out).
         async function resolve(refs) {
             const blobs = await tx(['blobs'], 'readonly', (b) => {
                 const out = [];
@@ -1052,7 +1055,7 @@ ${content(([x, y]) => [x - m, y - m])}
                 const blob = found && found[1];
                 if (!blob) return null;
                 hashes.set(blob, r.hash);
-                return { name: r.name, blob, role: r.role || null };
+                return { id: r.id, name: r.name, blob, role: r.role || null, meta: r.meta || {} };
             }).filter(Boolean);
         }
 
@@ -1066,6 +1069,8 @@ ${content(([x, y]) => [x - m, y - m])}
             const sig = signature(kind, from, refs);
             const same = (await tx(['batches'], 'readonly', (b) => b.getAll())).find((x) => x.sig === sig);
             const id = same ? same.id : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+            refs.forEach((r, i) => { r.id = `${id}:${i}`; });
+            if (same) refs.forEach((r, i) => { r.meta = (same.items[i] && same.items[i].meta) || undefined; });
             await tx(['batches'], 'readwrite', (b) => b.put({ id, from, kind, sig, created: Date.now(), items: refs }));
             await touch();
             return id;
@@ -1075,8 +1080,49 @@ ${content(([x, y]) => [x - m, y - m])}
         async function listBatches() {
             const all = (await tx(['batches'], 'readonly', (b) => b.getAll())) || [];
             all.sort((a, b) => b.created - a.created);
-            for (const batch of all) batch.items = await resolve(batch.items);
+            for (const batch of all) {
+                batch.items.forEach((r, i) => { if (!r.id) r.id = `${batch.id}:${i}`; });
+                batch.items = await resolve(batch.items);
+            }
             return all;
+        }
+
+        // Change library items: changes maps item id -> meta fields to set
+        // (undefined removes one).
+        async function updateItems(changes) {
+            const batches = await tx(['batches'], 'readonly', (b) => b.getAll());
+            const touched = [];
+            batches.forEach((batch) => {
+                let hit = false;
+                batch.items.forEach((r, i) => {
+                    const id = r.id || `${batch.id}:${i}`;
+                    if (!changes.has(id)) return;
+                    r.id = id;
+                    const meta = { ...(r.meta || {}), ...changes.get(id) };
+                    Object.keys(meta).forEach((k) => { if (meta[k] === undefined || meta[k] === null || meta[k] === '') delete meta[k]; });
+                    r.meta = meta;
+                    hit = true;
+                });
+                if (hit) touched.push(batch);
+            });
+            if (touched.length) await tx(['batches'], 'readwrite', (b) => touched.forEach((x) => b.put(x)));
+            await touch();
+        }
+
+        // Remove library items; a batch left empty goes too.
+        async function removeItems(ids) {
+            const drop = new Set(ids);
+            const batches = await tx(['batches'], 'readonly', (b) => b.getAll());
+            await tx(['batches'], 'readwrite', (b) => batches.forEach((batch) => {
+                // Ids from positions become lasting before anything moves.
+                batch.items.forEach((r, i) => { if (!r.id) r.id = `${batch.id}:${i}`; });
+                const keep = batch.items.filter((r) => !drop.has(r.id));
+                if (keep.length === batch.items.length) return;
+                if (!keep.length) b.delete(batch.id);
+                else b.put({ ...batch, items: keep });
+            }));
+            await touch();
+            await collect();
         }
 
         async function removeBatch(id) {
@@ -1188,7 +1234,7 @@ ${content(([x, y]) => [x - m, y - m])}
         if (channel) channel.onmessage = () => listeners.forEach((fn) => fn());
 
         return {
-            addBatch, listBatches, removeBatch, clearBatches, savePage, loadPage, getInfo, setInfo,
+            addBatch, listBatches, removeBatch, clearBatches, updateItems, removeItems, savePage, loadPage, getInfo, setInfo,
             clearProject, isEmpty, sizeUsed, dump, load, hashOf, putFiles, resolve, touch, collect,
             onChange: (fn) => listeners.push(fn),
         };
@@ -1414,7 +1460,7 @@ ${content(([x, y]) => [x - m, y - m])}
             browse,
             onPick: async (set) => {
                 try {
-                    const files = itemsToFiles(set.items.filter(filter));
+                    const files = await itemsForTool(set.items.filter(filter), set.items);
                     await onFiles(files, set);
                     toast(`Loaded ${files.length} file(s) from ${toolLabel(set.from)}.`, 'success');
                 } catch (err) {
@@ -1424,16 +1470,17 @@ ${content(([x, y]) => [x - m, y - m])}
         });
     }
 
-    // Top-bar "Library": the project library, with a viewer for its files.
+    // Top-bar "Library": opens the project's library.
     function outputPreviewButton(container) {
-        return outputMenu(container, {
-            label: 'Library',
+        const wrap = h('div', { class: 'pnp-outputs' }, h('button', {
+            type: 'button',
+            class: 'pnp-outputs-btn',
             title: 'Files loaded into and made by the tools in this project',
-            wrapClass: 'pnp-outputs',
-            buttonClass: 'pnp-outputs-btn',
-            footer: true,
-            onPick: previewOutput,
-        });
+            'aria-haspopup': 'dialog',
+            onclick: () => openLibrary(),
+        }, 'Library'));
+        if (container) container.append(wrap);
+        return wrap;
     }
 
     // ---------------------------------------------------------------- output viewer
@@ -1542,21 +1589,495 @@ ${content(([x, y]) => [x - m, y - m])}
         return `${(n / 1024 / 1024).toFixed(1)} MB`;
     }
 
+    // ---------------------------------------------------------------- library items
+
+    // Edits set in the library that change the image a tool gets.
+    const isEdited = (meta) => !!(meta && (meta.rotate || meta.crop || meta.widthMm || meta.heightMm || meta.bleedMm));
+    const isRaster = (type) => /^image\//.test(type || '') && type !== 'image/svg+xml';
+
+    // A library item as a file for a tool: the image with the item's
+    // rotation and crop, stretched to its size in mm when its proportions
+    // differ, and carrying its DPI and bleed; other files as they are.
+    async function itemFile(item) {
+        const meta = item.meta || {};
+        const type = item.blob.type || typeFromName(item.name);
+        const role = meta.role || item.role || null;
+        const asFile = (blob, name) => {
+            const f = new File([blob], name, { type: blob.type || type });
+            if (role) f.pnpRole = role;
+            return f;
+        };
+        if (!isRaster(type) || !isEdited(meta)) return asFile(item.blob, item.name);
+
+        const bmp = await createImageBitmap(item.blob);
+        const rot = (((meta.rotate || 0) % 360) + 360) % 360;
+        const turned = rot % 180 !== 0;
+        const rw = turned ? bmp.height : bmp.width;
+        const rh = turned ? bmp.width : bmp.height;
+        const crop = meta.crop || { x: 0, y: 0, w: 1, h: 1 };
+        const sx = crop.x * rw, sy = crop.y * rh;
+        const sw = Math.max(1, crop.w * rw), sh = Math.max(1, crop.h * rh);
+
+        // Size: the width (or height) sets the DPI; with both, the other
+        // side is stretched to match.
+        const bleed = meta.bleedMm || 0;
+        let outW = Math.round(sw), outH = Math.round(sh), dpi = null;
+        if (meta.widthMm) {
+            dpi = (outW / (meta.widthMm + 2 * bleed)) * 25.4;
+            if (meta.heightMm) outH = Math.max(1, Math.round(((meta.heightMm + 2 * bleed) / 25.4) * dpi));
+        } else if (meta.heightMm) {
+            dpi = (outH / (meta.heightMm + 2 * bleed)) * 25.4;
+        }
+
+        const turnedCanvas = document.createElement('canvas');
+        turnedCanvas.width = rw;
+        turnedCanvas.height = rh;
+        const tg = turnedCanvas.getContext('2d');
+        tg.translate(rw / 2, rh / 2);
+        tg.rotate((rot * Math.PI) / 180);
+        tg.drawImage(bmp, -bmp.width / 2, -bmp.height / 2);
+        const out = document.createElement('canvas');
+        out.width = outW;
+        out.height = outH;
+        out.getContext('2d').drawImage(turnedCanvas, sx, sy, sw, sh, 0, 0, outW, outH);
+        let blob = await new Promise((res, rej) => out.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode image.'))), 'image/png'));
+        if (dpi) blob = await setImageDpi(blob, dpi);
+        if (bleed) blob = await setPngText(blob, 'PnPTools:bleed', String(bleed));
+        return asFile(blob, `${baseName(item.name)}.png`);
+    }
+
+    // Files for a tool from library items: each item, then the backs chosen
+    // for them (as backs), so tools pair them like fronts and backs.
+    async function itemsForTool(items, all = items) {
+        const files = [];
+        const backs = [];
+        for (const item of items) {
+            files.push(await itemFile(item));
+            const backId = item.meta && item.meta.back;
+            const back = backId && all.find((x) => x.id === backId);
+            if (back && !backs.includes(back)) backs.push(back);
+        }
+        for (const back of backs) {
+            const f = await itemFile(back);
+            f.pnpRole = 'back';
+            files.push(f);
+        }
+        return files;
+    }
+
+    // ---------------------------------------------------------------- library window
+
+    // The page's main drop zone ({ deliver }), which "Use in this tool" hands
+    // the chosen library items to. See dropzone.
+    let primaryDrop = null;
+
+    // The project's library: batches of thumbnails to select (click toggles,
+    // Shift-click selects a range), the selection's size in mm, bleed, front
+    // or back and back image, an image editor (double-click), and "Use in
+    // this tool". Edits are kept with the items and applied when a tool takes
+    // them (itemFile).
+    function openLibrary() {
+        const opener = document.activeElement;
+        let batches = [];
+        const selected = new Set();
+        const urls = new Map();
+        let pickingBack = false;
+        let anchor = null;
+
+        const allItems = () => batches.flatMap((b) => b.items);
+        const chosen = () => allItems().filter((it) => selected.has(it.id));
+        const urlOf = (it) => {
+            if (!urls.has(it.id)) urls.set(it.id, URL.createObjectURL(it.blob));
+            return urls.get(it.id);
+        };
+
+        const items = h('div', { class: 'pnp-library-items' });
+        const props = h('div', { class: 'pnp-library-props' });
+        const count = h('span', {});
+        const addInput = h('input', { type: 'file', multiple: true, hidden: true });
+        addInput.addEventListener('change', async () => {
+            const files = [...addInput.files];
+            addInput.value = '';
+            if (!files.length) return;
+            await store.addBatch({ kind: 'input', from: currentTool ? currentTool.name : 'Library', items: files.map((f) => ({ name: f.name, blob: f })) });
+            await reload();
+        });
+        const useButton = primaryDrop ? h('button', { type: 'button', class: 'pnp-viewer-btn pnp-library-use', onclick: () => use() }, 'Use in this tool') : null;
+        const close = h('button', { type: 'button', class: 'pnp-viewer-btn', 'aria-label': 'Close', onclick: () => done() }, '✕');
+        const dialog = h('div', { class: 'pnp-viewer pnp-library', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Library' },
+            h('div', { class: 'pnp-viewer-head' },
+                h('div', { class: 'pnp-viewer-title' }, h('strong', {}, 'Library'), count),
+                h('button', { type: 'button', class: 'pnp-viewer-btn', onclick: () => addInput.click() }, 'Add files…'),
+                addInput, useButton, close),
+            h('div', { class: 'pnp-library-body' }, items, props));
+        const backdrop = h('div', { class: 'pnp-viewer-backdrop', onclick: (e) => { if (e.target === backdrop) done(); } }, dialog);
+
+        let size = 0;
+        // keepProps: a typed value changed; redrawing the panel would take
+        // the cursor out of the field the user moved on to.
+        async function reload({ keepProps = false } = {}) {
+            try {
+                batches = await store.listBatches();
+                size = await store.sizeUsed();
+            } catch (err) { batches = []; }
+            const ids = new Set(allItems().map((it) => it.id));
+            [...selected].forEach((id) => { if (!ids.has(id)) selected.delete(id); });
+            renderItems();
+            if (!keepProps) renderProps();
+        }
+
+        function render() {
+            renderItems();
+            renderProps();
+        }
+
+        function renderItems() {
+            const scroll = items.scrollTop;
+            items.innerHTML = '';
+            const n = allItems().length;
+            count.textContent = ` · ${n} file${n === 1 ? '' : 's'} · ${formatBytes(size)}`;
+            if (!batches.length) {
+                items.append(h('div', { class: 'pnp-popover-empty' }, 'Nothing here yet. Files you load into or export from the tools show up here.'));
+            }
+            batches.forEach((batch) => {
+                const all = batch.items.every((it) => selected.has(it.id));
+                items.append(h('section', { class: 'pnp-library-batch', 'data-kind': batch.kind },
+                    h('div', { class: 'pnp-library-batch-head' },
+                        h('strong', {}, describeSet(batch)),
+                        h('span', {}, ` ${batch.kind === 'input' ? 'loaded in' : 'from'} ${toolLabel(batch.from)} · ${timeAgo(batch.created)}`),
+                        h('button', {
+                            type: 'button',
+                            class: 'pnp-library-link pnp-library-select',
+                            'data-batch': batch.id,
+                            onclick: () => {
+                                const every = batch.items.every((it) => selected.has(it.id));
+                                batch.items.forEach((it) => (every ? selected.delete(it.id) : selected.add(it.id)));
+                                showSelection();
+                            },
+                        }, all ? 'Select none' : 'Select all'),
+                        h('button', {
+                            type: 'button',
+                            class: 'pnp-library-link',
+                            onclick: async () => { await store.removeBatch(batch.id); await reload(); },
+                        }, 'Remove')),
+                    h('div', { class: 'pnp-library-grid' }, batch.items.map(tile))));
+            });
+            items.scrollTop = scroll;
+        }
+
+        function tile(it) {
+            const meta = it.meta || {};
+            const type = it.blob.type || typeFromName(it.name);
+            const on = selected.has(it.id);
+            const tags = [];
+            if (meta.widthMm && meta.heightMm) tags.push(`${units.format(meta.widthMm)} × ${units.format(meta.heightMm)}`);
+            const role = meta.role || it.role;
+            if (role) tags.push(role === 'back' ? 'Back' : 'Front');
+            if (meta.back) tags.push('+ back');
+            const pic = isRaster(type) || type === 'image/svg+xml'
+                ? h('img', { src: urlOf(it), alt: '', loading: 'lazy', style: meta.rotate ? `transform: rotate(${meta.rotate}deg)` : null })
+                : h('span', { class: 'pnp-viewer-filetype' }, (it.name.split('.').pop() || 'file').slice(0, 4).toUpperCase());
+            return h('button', {
+                type: 'button',
+                class: `pnp-library-tile${on ? ' selected' : ''}`,
+                'aria-pressed': String(on),
+                title: isRaster(type) ? `${it.name} (double-click to edit)` : it.name,
+                'data-id': it.id,
+                onclick: (e) => click(it, e),
+                ondblclick: () => { if (isRaster(type)) editImage(it); },
+            },
+            h('span', { class: 'pnp-library-pic' }, pic),
+            h('span', { class: 'pnp-library-name' }, it.name),
+            tags.length ? h('span', { class: 'pnp-library-tags' }, tags.join(' · ')) : null);
+        }
+
+        function click(it, e) {
+            if (pickingBack) {
+                pickingBack = false;
+                change({ back: it.id }, chosen().filter((x) => x.id !== it.id));
+                return;
+            }
+            const list = allItems();
+            if (e.shiftKey && anchor) {
+                const [a, b] = [list.findIndex((x) => x.id === anchor), list.findIndex((x) => x.id === it.id)].sort((x, y) => x - y);
+                if (a >= 0) list.slice(a, b + 1).forEach((x) => selected.add(x.id));
+            } else if (selected.has(it.id)) {
+                selected.delete(it.id);
+            } else {
+                selected.add(it.id);
+            }
+            anchor = it.id;
+            showSelection();
+        }
+
+        // Selection changes only restyle the tiles: replacing them would break
+        // a double-click, whose second click would land on a new tile.
+        function showSelection() {
+            items.querySelectorAll('.pnp-library-tile').forEach((t) => {
+                const on = selected.has(t.dataset.id);
+                t.classList.toggle('selected', on);
+                t.setAttribute('aria-pressed', String(on));
+            });
+            items.querySelectorAll('.pnp-library-select').forEach((b) => {
+                const batch = batches.find((x) => x.id === b.dataset.batch);
+                b.textContent = batch && batch.items.every((it) => selected.has(it.id)) ? 'Select none' : 'Select all';
+            });
+            renderProps();
+        }
+
+        // Changes run one after another: each reads and rewrites the items,
+        // so two at once would lose one.
+        let queue = Promise.resolve();
+        function change(patch, targets = chosen(), opts = {}) {
+            if (!targets.length) return queue;
+            const ids = targets.map((it) => it.id);
+            queue = queue.then(async () => {
+                await store.updateItems(new Map(ids.map((id) => [id, patch])));
+                await reload(opts);
+            }).catch((err) => toast(`Could not change the files: ${err.message}`, 'error'));
+            return queue;
+        }
+
+        function renderProps() {
+            props.innerHTML = '';
+            const sel = chosen();
+            if (useButton) {
+                useButton.textContent = sel.length ? `Use ${sel.length} in this tool` : 'Use in this tool';
+                useButton.disabled = !sel.length;
+            }
+            if (!sel.length) {
+                props.append(h('div', { class: 'pnp-library-hint' }, 'Select files to set their size, bleed and back.'));
+                return;
+            }
+            const value = (key) => {
+                const vals = sel.map((it) => (it.meta || {})[key]);
+                return vals.every((v) => v === vals[0]) ? vals[0] : undefined;
+            };
+            const mixed = (key) => sel.some((it) => (it.meta || {})[key] !== (sel[0].meta || {})[key]);
+            const numberField = (id, label, key) => {
+                const input = h('input', { type: 'number', id, min: '0', step: '0.1', 'data-unit': 'mm', value: value(key) ?? '', placeholder: mixed(key) ? 'mixed' : '' });
+                input.addEventListener('change', () => {
+                    const v = parseFloat(input.value);
+                    change({ [key]: v > 0 ? v : undefined }, chosen(), { keepProps: true });
+                });
+                return h('div', { class: 'control-group' }, h('label', { for: id }, label), input);
+            };
+
+            // Card size presets fill both sides at once.
+            const preset = h('select', { id: 'pnpLibPreset' },
+                h('option', { value: '' }, value('widthMm') ? 'Custom' : 'No size'),
+                presets.card.map((p) => h('option', { value: p.id }, `${p.label} (${formatSize(p)})`)),
+                value('widthMm') ? h('option', { value: 'none' }, 'No size') : null);
+            const match = presets.card.find((p) => p.w === value('widthMm') && p.h === value('heightMm'));
+            if (match) preset.value = match.id;
+            preset.addEventListener('change', () => {
+                if (preset.value === 'none') change({ widthMm: undefined, heightMm: undefined });
+                const p = presets.card.find((x) => x.id === preset.value);
+                if (p) change({ widthMm: p.w, heightMm: p.h });
+            });
+
+            const role = h('select', { id: 'pnpLibRole' },
+                h('option', { value: '' }, mixed('role') ? 'Mixed' : 'Not set'),
+                h('option', { value: 'front' }, 'Front'),
+                h('option', { value: 'back' }, 'Back'));
+            role.value = value('role') || '';
+            role.addEventListener('change', () => change({ role: role.value || undefined }));
+
+            const backId = value('back');
+            const back = backId && allItems().find((x) => x.id === backId);
+            const one = sel.length === 1 && isRaster(sel[0].blob.type || typeFromName(sel[0].name));
+
+            props.append(
+                h('div', { class: 'pnp-library-props-title' }, `${sel.length} selected`),
+                h('div', { class: 'control-group' }, h('label', { for: 'pnpLibPreset' }, 'Size'), preset),
+                h('div', { class: 'row' }, numberField('pnpLibW', 'Width (mm)', 'widthMm'), numberField('pnpLibH', 'Height (mm)', 'heightMm')),
+                numberField('pnpLibBleed', 'Bleed in image (mm)', 'bleedMm'),
+                h('div', { class: 'control-group' }, h('label', { for: 'pnpLibRole' }, 'Side'), role),
+                h('div', { class: 'control-group' },
+                    h('label', {}, 'Back'),
+                    h('div', { class: 'pnp-library-back' },
+                        back ? h('img', { src: urlOf(back), alt: back.name, title: back.name }) : h('span', { class: 'pnp-library-hint' }, mixed('back') ? 'Mixed' : 'None'),
+                        h('button', { type: 'button', class: 'btn-secondary btn-small', onclick: () => { pickingBack = true; renderProps(); } }, pickingBack ? 'Click the back…' : 'Choose…'),
+                        backId || mixed('back') ? h('button', { type: 'button', class: 'btn-secondary btn-small', onclick: () => change({ back: undefined }) }, 'None') : null)),
+                h('div', { class: 'button-group' },
+                    h('button', {
+                        type: 'button',
+                        class: 'btn-secondary',
+                        onclick: () => {
+                            const batch = batches.find((b) => b.items.includes(sel[0]));
+                            previewOutput({ ...batch, items: sel });
+                        },
+                    }, 'View'),
+                    h('button', { type: 'button', class: 'btn-secondary', disabled: !one, onclick: () => editImage(sel[0]) }, 'Edit image…'),
+                    h('button', {
+                        type: 'button',
+                        class: 'btn-secondary',
+                        onclick: async () => { await store.removeItems(sel.map((it) => it.id)); selected.clear(); await reload(); },
+                    }, 'Remove')));
+            units.scan(props);
+            units.relabel(props);
+        }
+
+        function editImage(item) {
+            imageEditor(item, (patch) => change(patch, [item]));
+        }
+
+        async function use() {
+            const sel = chosen();
+            if (!sel.length || !primaryDrop) return;
+            const files = await itemsForTool(sel, allItems());
+            done();
+            primaryDrop.deliver(files);
+        }
+
+        // Esc closes the library only when nothing is open over it.
+        function onKey(e) {
+            const top = [...document.querySelectorAll('.pnp-viewer-backdrop')].pop();
+            if (e.key === 'Escape' && top === backdrop) { e.preventDefault(); done(); }
+        }
+
+        function done() {
+            document.removeEventListener('keydown', onKey, true);
+            backdrop.remove();
+            document.body.classList.remove('pnp-viewer-open');
+            urls.forEach((u) => URL.revokeObjectURL(u));
+            if (opener && opener.focus) opener.focus();
+        }
+
+        document.addEventListener('keydown', onKey, true);
+        document.body.append(backdrop);
+        document.body.classList.add('pnp-viewer-open');
+        close.focus();
+        reload();
+        return { close: done };
+    }
+
+    // Crop and rotate one image: drag the box or its corners, turn with the
+    // buttons. onDone({ rotate, crop }) with undefined for "none".
+    function imageEditor(item, onDone) {
+        const meta = item.meta || {};
+        let rot = (((meta.rotate || 0) % 360) + 360) % 360;
+        let crop = { ...(meta.crop || { x: 0, y: 0, w: 1, h: 1 }) };
+        const url = URL.createObjectURL(item.blob);
+        const img = new Image();
+        const canvas = h('canvas', { class: 'pnp-crop-canvas' });
+        const ctx = canvas.getContext('2d');
+        const MIN = 0.02;
+
+        // The same region after a quarter turn.
+        const turnCrop = (c, cw) => (cw ? { x: 1 - (c.y + c.h), y: c.x, w: c.h, h: c.w } : { x: c.y, y: 1 - (c.x + c.w), w: c.h, h: c.w });
+
+        function draw() {
+            if (!img.naturalWidth) return;
+            const turned = rot % 180 !== 0;
+            const iw = turned ? img.naturalHeight : img.naturalWidth;
+            const ih = turned ? img.naturalWidth : img.naturalHeight;
+            const box = Math.min(560, window.innerWidth - 80);
+            const k = Math.min(box / iw, box / ih);
+            const vw = Math.round(iw * k), vh = Math.round(ih * k);
+            canvas.width = vw;
+            canvas.height = vh;
+            ctx.save();
+            ctx.translate(vw / 2, vh / 2);
+            ctx.rotate((rot * Math.PI) / 180);
+            const dw = img.naturalWidth * k, dh = img.naturalHeight * k;
+            ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+            ctx.restore();
+            const r = { x: crop.x * vw, y: crop.y * vh, w: crop.w * vw, h: crop.h * vh };
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.beginPath();
+            ctx.rect(0, 0, vw, vh);
+            ctx.rect(r.x, r.y, r.w, r.h);
+            ctx.fill('evenodd');
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(r.x, r.y, r.w, r.h);
+            ctx.fillStyle = '#fff';
+            [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]].forEach(([x, y]) => ctx.fillRect(x - 5, y - 5, 10, 10));
+        }
+
+        // Dragging: a corner resizes, inside moves.
+        let drag = null;
+        const at = (e) => {
+            const b = canvas.getBoundingClientRect();
+            return { px: (e.clientX - b.left) / b.width, py: (e.clientY - b.top) / b.height, tx: 12 / b.width, ty: 12 / b.height };
+        };
+        canvas.addEventListener('pointerdown', (e) => {
+            const { px, py, tx, ty } = at(e);
+            const corners = { nw: [crop.x, crop.y], ne: [crop.x + crop.w, crop.y], sw: [crop.x, crop.y + crop.h], se: [crop.x + crop.w, crop.y + crop.h] };
+            const corner = Object.keys(corners).find((c) => Math.abs(corners[c][0] - px) < tx && Math.abs(corners[c][1] - py) < ty);
+            const inside = px > crop.x && px < crop.x + crop.w && py > crop.y && py < crop.y + crop.h;
+            if (!corner && !inside) return;
+            drag = { corner, px, py, start: { ...crop } };
+            canvas.setPointerCapture(e.pointerId);
+        });
+        canvas.addEventListener('pointermove', (e) => {
+            if (!drag) return;
+            const { px, py } = at(e);
+            const dx = px - drag.px, dy = py - drag.py;
+            const s0 = drag.start;
+            const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+            if (!drag.corner) {
+                crop = { ...s0, x: clamp(s0.x + dx, 0, 1 - s0.w), y: clamp(s0.y + dy, 0, 1 - s0.h) };
+            } else {
+                let x0 = s0.x, y0 = s0.y, x1 = s0.x + s0.w, y1 = s0.y + s0.h;
+                if (drag.corner.includes('w')) x0 = clamp(x0 + dx, 0, x1 - MIN);
+                if (drag.corner.includes('e')) x1 = clamp(x1 + dx, x0 + MIN, 1);
+                if (drag.corner.includes('n')) y0 = clamp(y0 + dy, 0, y1 - MIN);
+                if (drag.corner.includes('s')) y1 = clamp(y1 + dy, y0 + MIN, 1);
+                crop = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+            }
+            draw();
+        });
+        canvas.addEventListener('pointerup', () => { drag = null; });
+
+        const turn = (cw) => { rot = (rot + (cw ? 90 : 270)) % 360; crop = turnCrop(crop, cw); draw(); };
+        const full = (c) => c.x < 0.001 && c.y < 0.001 && c.w > 0.999 && c.h > 0.999;
+        const dialog = h('div', { class: 'pnp-viewer pnp-crop', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Edit image' },
+            h('div', { class: 'pnp-viewer-head' },
+                h('div', { class: 'pnp-viewer-title' }, h('strong', {}, item.name)),
+                h('button', { type: 'button', class: 'pnp-viewer-btn', title: 'Turn left', 'aria-label': 'Turn left', onclick: () => turn(false) }, '⟲'),
+                h('button', { type: 'button', class: 'pnp-viewer-btn', title: 'Turn right', 'aria-label': 'Turn right', onclick: () => turn(true) }, '⟳'),
+                h('button', { type: 'button', class: 'pnp-viewer-btn', onclick: () => { rot = 0; crop = { x: 0, y: 0, w: 1, h: 1 }; draw(); } }, 'Reset'),
+                h('button', { type: 'button', class: 'pnp-viewer-btn', onclick: () => finish(false) }, 'Cancel'),
+                h('button', { type: 'button', class: 'pnp-viewer-btn pnp-library-use', onclick: () => finish(true) }, 'Done')),
+            h('div', { class: 'pnp-crop-stage' }, canvas));
+        const backdrop = h('div', { class: 'pnp-viewer-backdrop pnp-crop-backdrop' }, dialog);
+
+        function onKey(e) {
+            if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+        }
+        function finish(keep) {
+            document.removeEventListener('keydown', onKey, true);
+            backdrop.remove();
+            URL.revokeObjectURL(url);
+            if (keep) onDone({ rotate: rot || undefined, crop: full(crop) ? undefined : crop });
+        }
+        document.addEventListener('keydown', onKey, true);
+        document.body.append(backdrop);
+        img.onload = draw;
+        img.src = url;
+    }
+
     // ---------------------------------------------------------------- dropzone
 
     // Files taken in are recorded as the tool's input (record: false to skip).
     // The zone also gets a "Pick from library" button (pick: false to skip).
+    // The page's first zone for images is where the library's "Use in this
+    // tool" delivers.
     function dropzone(zone, { input, onFiles, accept, record = true, pick = true }) {
         const accepts = acceptMatcher(accept);
         const matches = (f) => accepts(f.name, f.type);
-        const deliver = (fileList) => {
+        // Files from the library are in it already: they aren't recorded again.
+        const deliver = (fileList, { fromLibrary = false } = {}) => {
             const files = [...fileList];
             const ok = files.filter(matches);
             if (ok.length < files.length) toast(`Skipped ${files.length - ok.length} unsupported file(s).`, 'error');
             if (!ok.length) return;
-            if (record) recordFiles({ kind: 'input', items: ok.map((f) => ({ name: f.name, blob: f })) });
+            if (record && !fromLibrary) recordFiles({ kind: 'input', items: ok.map((f) => ({ name: f.name, blob: f })) });
             onFiles(ok);
         };
+        if (!primaryDrop && accepts('card.png', 'image/png')) primaryDrop = { deliver: (files) => deliver(files, { fromLibrary: true }) };
         zone.addEventListener('click', (e) => {
             if (e.target === input || e.target.closest('button, a')) return;
             input.click();
@@ -1576,7 +2097,7 @@ ${content(([x, y]) => [x - m, y - m])}
             deliver(e.dataTransfer.files);
         });
         if (pick) {
-            const picker = filePicker(zone, { accept, onFiles: (files) => deliver(files) });
+            const picker = filePicker(zone, { accept, onFiles: (files) => deliver(files, { fromLibrary: true }) });
             // Clicks in the picker must not open the zone's file chooser.
             picker.addEventListener('click', (e) => e.stopPropagation());
             picker.addEventListener('keydown', (e) => e.stopPropagation());
@@ -2036,6 +2557,7 @@ ${content(([x, y]) => [x - m, y - m])}
         filePicker,
         outputPreviewButton,
         previewOutput,
+        library: { open: openLibrary, itemFile, itemsForTool },
         itemsToFiles,
         recordFiles,
         dropzone,
