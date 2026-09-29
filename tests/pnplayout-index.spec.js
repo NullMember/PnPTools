@@ -81,9 +81,7 @@ test('a back image adds a back page after each front page', async ({ page }) => 
 });
 
 test.describe('grid mode', () => {
-  const setMode = async (page, mode) => {
-    await page.selectOption('#packMode', mode);
-  };
+  const setMode = (page, mode) => page.goto(`PnPLayout/${mode}.html`);
   // Is something drawn at (x, y) mm on the first sheet (not white paper)?
   const darkAt = (page, x, y) => page.evaluate(({ x, y }) => {
     const c = document.querySelector('#sheetGrid canvas');
@@ -93,14 +91,11 @@ test.describe('grid mode', () => {
   }, { x, y });
 
   test('cards line up in rows and columns, centred on the page', async ({ page }) => {
-    await expect(page.locator('#cropMarksGroup')).toBeHidden();
     await setMode(page, 'grid');
-    await expect(page.locator('#cropMarksGroup')).toBeVisible();
-    await expect(page.locator('#precisionGroup')).toBeHidden();
     await page.setInputFiles('#imageInput', await card(page, 300));
     await rows(page).getByLabel('Quantity').fill('10');
     // A4, 7 mm margins, 2 mm gap: 3 × 3 poker cards.
-    await expect(status(page)).toContainText('10 piece(s) on 2 sheet(s)');
+    await expect(status(page)).toContainText('10 card(s) on 2 sheet(s)');
     await expect(status(page)).toContainText('3 × 3 per sheet');
     const first = await page.evaluate(() => state.layout.sheets[0].slice(0, 2));
     // (196 − 193) / 2 + 7 + 31.5 across; the card image is 87.98 mm tall.
@@ -139,7 +134,7 @@ test.describe('grid mode', () => {
   test('a card too big for the page is reported', async ({ page }) => {
     await setMode(page, 'grid');
     await page.setInputFiles('#imageInput', await card(page, 300, { name: 'Board.png' }));
-    await expect(status(page)).toContainText('1 piece(s)');
+    await expect(status(page)).toContainText('1 card(s)');
     await page.fill('#pw1__display', '400');
     await expect(status(page)).toContainText('Too large for the printable area: Board');
   });
@@ -187,12 +182,12 @@ test.describe('images that already include bleed', () => {
   });
 
   test('pieces added later are trimmed too, and grid gaps leave room for the bleed', async ({ page }) => {
+    await page.goto('PnPLayout/grid.html');
     await page.fill('#spacing__display', '0');
     await page.fill('#imageBleed__display', '3');
     await page.press('#imageBleed__display', 'Tab');
-    await page.selectOption('#packMode', 'grid');
     await page.setInputFiles('#imageInput', await card(page, 300, { bleed: 3 }));
-    await expect(status(page)).toContainText('1 piece(s)');
+    await expect(status(page)).toContainText('1 card(s)');
     expect((await piece(page)).widthMm).toBeCloseTo(63, 0);
     const grid = await page.evaluate(() => state.layout.grid);
     expect(grid.gap).toBeCloseTo(3, 1); // bleed of one card may reach the next card's cut, no further
@@ -265,8 +260,7 @@ test('corner radius rounds the cut outline of rectangular cards only', async ({ 
 
 test.describe('fold mode', () => {
   const setup = async (page, { qty = 4, back = true } = {}) => {
-    await page.selectOption('#packMode', 'fold');
-    await expect(page.locator('#foldGroup')).toBeVisible();
+    await page.goto('PnPLayout/fold.html');
     await page.setInputFiles('#imageInput', await card(page, 300));
     await rows(page).getByLabel('Quantity').fill(String(qty));
     if (back) {
@@ -282,7 +276,7 @@ test.describe('fold mode', () => {
   test('backs are the fronts mirrored across the fold', async ({ page }) => {
     await setup(page);
     // A4: four cards on their side fit either fold; auto takes the vertical one.
-    await expect(status(page)).toContainText('4 piece(s) on 1 sheet(s)');
+    await expect(status(page)).toContainText('4 card(s) on 1 sheet(s)');
     await expect(status(page)).toContainText('backs across a vertical fold');
     const { sheets, fold } = await layout(page);
     expect(fold.at).toBeCloseTo(105, 5); // middle of the printable area
@@ -346,18 +340,18 @@ test.describe('grid size', () => {
   };
 
   test('rows and columns can be set by hand', async ({ page }) => {
-    await page.selectOption('#packMode', 'grid');
+    await page.goto('PnPLayout/grid.html');
     await expect(page.locator('#gridCountGroup')).toBeHidden();
     await page.setInputFiles('#imageInput', await card(page, 300));
     await rows(page).getByLabel('Quantity').fill('5');
     await manual(page, 2, 2);
     await expect(page.locator('#gridCountGroup')).toBeVisible();
-    await expect(status(page)).toContainText('5 piece(s) on 2 sheet(s)');
+    await expect(status(page)).toContainText('5 card(s) on 2 sheet(s)');
     await expect(status(page)).toContainText('2 × 2 per sheet');
   });
 
   test('a grid that only fits on its side turns the cards', async ({ page }) => {
-    await page.selectOption('#packMode', 'grid');
+    await page.goto('PnPLayout/grid.html');
     await page.setInputFiles('#imageInput', await card(page, 300));
     await manual(page, 2, 4); // A4: 3 × 3 upright, 2 × 4 turned
     await expect(status(page)).toContainText('2 × 4 per sheet');
@@ -365,7 +359,7 @@ test.describe('grid size', () => {
   });
 
   test('a grid too big for the page says so and uses the most that fits', async ({ page }) => {
-    await page.selectOption('#packMode', 'grid');
+    await page.goto('PnPLayout/grid.html');
     await page.setInputFiles('#imageInput', await card(page, 300));
     await rows(page).getByLabel('Allow rotation').uncheck();
     await manual(page, 5, 5);
@@ -373,18 +367,35 @@ test.describe('grid size', () => {
   });
 });
 
-test('each mode shows only its own settings', async ({ page }) => {
-  const visible = async () => Object.fromEntries(await Promise.all(
-    ['precisionGroup', 'cropMarksGroup', 'gridSizeGroup', 'foldGroup'].map(async (id) => [id, await page.locator(`#${id}`).isVisible()])));
-  expect(await visible()).toEqual({ precisionGroup: true, cropMarksGroup: false, gridSizeGroup: false, foldGroup: false });
-  await page.selectOption('#packMode', 'grid');
-  expect(await visible()).toEqual({ precisionGroup: false, cropMarksGroup: true, gridSizeGroup: true, foldGroup: false });
-  await page.selectOption('#packMode', 'fold');
-  expect(await visible()).toEqual({ precisionGroup: false, cropMarksGroup: true, gridSizeGroup: true, foldGroup: true });
+test('each page has only its own settings', async ({ page }) => {
+  const has = () => page.evaluate(() => Object.fromEntries(['precision', 'cropMarks', 'gridSizeMode', 'foldDirection', 'flipEdge'].map((id) => [id, !!document.getElementById(id)])));
+  expect(await has()).toEqual({ precision: true, cropMarks: false, gridSizeMode: false, foldDirection: false, flipEdge: true });
+  await page.goto('PnPLayout/grid.html');
+  expect(await has()).toEqual({ precision: false, cropMarks: true, gridSizeMode: true, foldDirection: false, flipEdge: true });
+  await page.goto('PnPLayout/fold.html');
+  expect(await has()).toEqual({ precision: false, cropMarks: true, gridSizeMode: true, foldDirection: true, flipEdge: false });
+});
+
+test('switching page takes the pieces along', async ({ page }) => {
+  await page.setInputFiles('#imageInput', [await card(page, 300, { name: 'Ace.png' }), await card(page, 300, { name: 'King.png' })]);
+  await expect(rows(page)).toHaveCount(2);
+  await rows(page).first().getByLabel('Quantity').fill('3');
+  await page.fill('#pw1__display', '50');
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Add backs…' }).click()]);
+  await chooser.setFiles(await card(page, 300, { name: 'Back.png' }));
+  await expect(rows(page).locator('.piece-face.back img')).toHaveCount(2);
+
+  await Promise.all([page.waitForURL(/grid\.html/), page.locator('.tool-nav').getByRole('link', { name: /Card grid/ }).click()]);
+  await expect(rows(page)).toHaveCount(2);
+  const pieces = await page.evaluate(() => [...state.pieces.values()].map((p) => [p.front.file.name, p.back && p.back.file.name, p.qty, p.widthMm]));
+  expect(pieces).toEqual([['Ace.png', 'Back.png', 3, 50], ['King.png', 'Back.png', 1, 63]]);
+  await expect(status(page)).toContainText('4 card(s)');
+  // The hand-off used to carry them isn't left in Inputs & outputs.
+  await expect.poll(() => page.evaluate(async () => (await PnP.handoff.list()).filter((set) => set.name === 'Layout pieces').length)).toBe(0);
 });
 
 test('back pages get crop marks mirrored like the backs', async ({ page }) => {
-  await page.selectOption('#packMode', 'grid');
+  await page.goto('PnPLayout/grid.html');
   await page.setInputFiles('#imageInput', await card(page, 300));
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Add backs…' }).click()]);
   await chooser.setFiles(await card(page, 300, { name: 'Back.png' }));

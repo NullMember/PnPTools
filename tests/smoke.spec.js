@@ -9,6 +9,8 @@ const PAGES = [
   'PnPAlign/index.html',
   'PnPBleed/index.html',
   'PnPLayout/index.html',
+  'PnPLayout/grid.html',
+  'PnPLayout/fold.html',
   'PnPBooklet/index.html',
   'PnPCut/index.html',
   'PnPCut/editor.html',
