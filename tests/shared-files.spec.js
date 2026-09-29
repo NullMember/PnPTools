@@ -305,3 +305,57 @@ test.describe('with the File System Access API', () => {
     expect(await state(page)).toEqual({ calls: 1, files: ['Mine.pnp'] }); // only the open dialog
   });
 });
+
+// ---- unsaved work ----
+
+test.describe('unsaved-work warning after Save', () => {
+  const newButton = (page) => topBar(page).getByRole('button', { name: 'New', exact: true });
+  // Clicks New and reports whether it asked to discard the work.
+  async function newAsks(page) {
+    let asked = false;
+    page.removeAllListeners('dialog');
+    page.on('dialog', (d) => { asked = true; d.accept(); });
+    await Promise.all([page.waitForEvent('load'), newButton(page).click()]);
+    return asked;
+  }
+
+  test('New does not ask right after a Save, but does after a change', async ({ page }) => {
+    await page.goto('PnPBleed/index.html');
+    const img = await makeCardImages(page);
+    await page.setInputFiles('#imageInput', [img.alpha]);
+    await download(page, () => topBar(page).getByRole('button', { name: 'Save', exact: true }).click());
+    expect(await newAsks(page)).toBe(false);
+
+    await page.setInputFiles('#imageInput', [img.alpha]);
+    await download(page, () => topBar(page).getByRole('button', { name: 'Save', exact: true }).click());
+    await page.fill('#bleedInput__display', '4'); // a change after saving
+    expect(await newAsks(page)).toBe(true);
+  });
+
+  test('a project just opened does not count as unsaved', async ({ page }) => {
+    await page.goto('PnPBleed/index.html');
+    const img = await makeCardImages(page);
+    await page.setInputFiles('#imageInput', [img.alpha]);
+    const saved = await download(page, () => topBar(page).getByRole('button', { name: 'Save', exact: true }).click());
+    await page.goto('PnPBleed/index.html');
+    await page.evaluate(async (bytes) => {
+      await PnP.project.load(new File([new Uint8Array(bytes)], 'cards.pnp'));
+    }, [...require('node:fs').readFileSync(saved.path)]);
+    await expect(page.locator('#thumbnailsContainer .thumbnail')).toHaveCount(1);
+    expect(await newAsks(page)).toBe(false);
+  });
+
+  test('leaving right after a Save does not warn', async ({ page }) => {
+    await page.goto('PnPBleed/index.html');
+    const img = await makeCardImages(page);
+    await page.setInputFiles('#imageInput', [img.alpha]);
+    const warns = () => page.evaluate(() => {
+      const e = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(e);
+      return e.defaultPrevented;
+    });
+    expect(await warns()).toBe(true);
+    await download(page, () => topBar(page).getByRole('button', { name: 'Save', exact: true }).click());
+    expect(await warns()).toBe(false);
+  });
+});
