@@ -78,3 +78,80 @@ test('a back image adds a back page after each front page', async ({ page }) => 
   const pdf = await download(page, () => page.click('#downloadPdf'));
   expect(await pdfPages(page, pdf)).toBe(2);
 });
+
+test.describe('grid mode', () => {
+  const setMode = async (page, mode) => {
+    await page.selectOption('#packMode', mode);
+  };
+  // Is something drawn at (x, y) mm on the first sheet (not white paper)?
+  const darkAt = (page, x, y) => page.evaluate(({ x, y }) => {
+    const c = document.querySelector('#sheetGrid canvas');
+    const k = c.width / readSettings().paper.w;
+    const [r, g, b] = c.getContext('2d').getImageData(Math.round(x * k), Math.round(y * k), 1, 1).data;
+    return r + g + b < 700;
+  }, { x, y });
+
+  test('cards line up in rows and columns, centred on the page', async ({ page }) => {
+    await expect(page.locator('#cropMarksGroup')).toBeHidden();
+    await setMode(page, 'grid');
+    await expect(page.locator('#cropMarksGroup')).toBeVisible();
+    await expect(page.locator('#precisionGroup')).toBeHidden();
+    await page.setInputFiles('#imageInput', await card(page, 300));
+    await rows(page).getByLabel('Quantity').fill('10');
+    // A4, 7 mm margins, 2 mm gap: 3 × 3 poker cards.
+    await expect(status(page)).toContainText('10 piece(s) on 2 sheet(s)');
+    await expect(status(page)).toContainText('3 × 3 per sheet');
+    const first = await page.evaluate(() => state.layout.sheets[0].slice(0, 2));
+    // (196 − 193) / 2 + 7 + 31.5 across; the card image is 87.98 mm tall.
+    expect(first[0].angle).toBe(0);
+    expect(first[0].cx).toBeCloseTo(40, 5);
+    expect(first[0].cy).toBeCloseTo(58.5, 1);
+    expect(first[1].cx - first[0].cx).toBeCloseTo(65, 5); // card + gap
+  });
+
+  test('cards turn sideways when that fits more, unless rotation is off', async ({ page }) => {
+    await setMode(page, 'grid');
+    await page.fill('#paperW__display', '297');
+    await page.fill('#paperH__display', '210');
+    await page.setInputFiles('#imageInput', await card(page, 300));
+    await rows(page).getByLabel('Quantity').fill('9');
+    await expect(status(page)).toContainText('3 × 3 per sheet'); // 4 × 2 upright
+    expect(await page.evaluate(() => state.layout.sheets[0][0].angle)).toBe(90);
+    await rows(page).getByLabel('Allow rotation').uncheck();
+    await expect(status(page)).toContainText('4 × 2 per sheet');
+  });
+
+  test('crop marks sit in the margin in line with the cuts', async ({ page }) => {
+    await setMode(page, 'grid');
+    await page.setInputFiles('#imageInput', await card(page, 300));
+    await expect(status(page)).toContainText('3 × 3 per sheet');
+    // First cut at x = 8.5 mm; the grid starts at y = 14.5 mm, bleed 1 mm, marks 1 mm further out.
+    const marks = await page.evaluate(() => cropMarks(state.layout.grid, readSettings().paper, readSettings().bleed));
+    expect(marks).toHaveLength(24); // 6 vertical cut lines × 2 + 6 horizontal × 2
+    const mark = marks.find(([x1, y1]) => x1 === 8.5 && y1 < 20);
+    [8.5, 7.5, 8.5, 12.5].forEach((v, i) => expect(mark[i]).toBeCloseTo(v, 1));
+    expect(await darkAt(page, 8.5, 10)).toBe(true);
+    await page.uncheck('#cropMarks');
+    await expect.poll(() => darkAt(page, 8.5, 10)).toBe(false);
+  });
+
+  test('a card too big for the page is reported', async ({ page }) => {
+    await setMode(page, 'grid');
+    await page.setInputFiles('#imageInput', await card(page, 300, { name: 'Board.png' }));
+    await expect(status(page)).toContainText('1 piece(s)');
+    await page.fill('#pw1__display', '400');
+    await expect(status(page)).toContainText('Too large for the printable area: Board');
+  });
+
+  test('exports the grid with back pages', async ({ page }) => {
+    await setMode(page, 'grid');
+    await page.setInputFiles('#imageInput', await card(page, 300));
+    await rows(page).getByLabel('Quantity').fill('10');
+    await expect(status(page)).toContainText('on 2 sheet(s)');
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), rows(page).locator('.piece-face.back').click()]);
+    await chooser.setFiles(await card(page, 300, { name: 'Back.png' }));
+    await expect(status(page)).toContainText('2 back page(s)');
+    const pdf = await download(page, () => page.click('#downloadPdf'));
+    expect(await pdfPages(page, pdf)).toBe(4);
+  });
+});
