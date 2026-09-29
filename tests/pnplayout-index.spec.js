@@ -240,3 +240,28 @@ test.describe('adding backs', () => {
     expect(await backsOf(page)).toEqual([null, null]);
   });
 });
+
+test('corner radius rounds the cut outline of rectangular cards only', async ({ page }) => {
+  const img = await makeCardImages(page); // alpha: its own rounded shape
+  await page.setInputFiles('#imageInput', [await card(page, 300, { name: 'Plain.png' }), img.alpha]);
+  await expect(rows(page)).toHaveCount(2);
+  await page.fill('#cornerRadius__display', '3');
+  await page.press('#cornerRadius__display', 'Tab');
+  const outlines = await page.evaluate(() => {
+    const s = readSettings();
+    return [...state.pieces.values()].map((p) => outlineOnSheet(p, { cx: 0, cy: 0, angle: 0 }, s.cornerRadius));
+  });
+  // Rounded rectangle: no point sits in the square corner, the arcs are 3 mm.
+  const [rect, shaped] = outlines;
+  const w = 63 / 2, h = 88 / 2;
+  expect(rect.length).toBeGreaterThan(40);
+  expect(rect.some(([x, y]) => Math.abs(x) > w - 0.5 && Math.abs(y) > h - 0.5)).toBe(false);
+  expect(Math.max(...rect.map(([x]) => x))).toBeCloseTo(w, 0);
+  // The traced shape is used as it is.
+  const traced = await page.evaluate(() => { const p = [...state.pieces.values()][1]; return outlineOnSheet(p, { cx: 0, cy: 0, angle: 0 }, 0).length; });
+  expect(shaped.length).toBe(traced);
+
+  await expect(status(page)).toContainText('2 piece(s)');
+  const svg = await download(page, () => page.click('#downloadSvg'));
+  expect((svg.text().match(/<path /g) || []).length).toBeGreaterThanOrEqual(2);
+});
