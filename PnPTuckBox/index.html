@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PnP Tuck Box</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/tool.css">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="shared/icon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#1a1d27">
+    <script src="shared/pnp-theme.js"></script>
+    <link rel="stylesheet" href="shared/pnp-shared.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>PnP Tuck Box</h1>
+            <p class="subtitle">Print a box for your deck, with your own artwork.</p>
+        </header>
+
+        <div class="content">
+            <div class="sidebar">
+                <div class="panel">
+                    <div class="panel-title">Box Style <span class="help" tabindex="0" data-tip="“No glue” styles lock with tabs pushed into slits.">?</span></div>
+                    <div class="control-group">
+                        <select id="boxStyle">
+                            <option value="tuck">Classic tuck box</option>
+                            <option value="tuckFixed">Tuck box, glued bottom</option>
+                            <option value="twoPiece">Two-piece box (lid + base)</option>
+                            <option value="sleeve">Sleeve / wrap</option>
+                            <optgroup label="No glue">
+                                <option value="tuckLock">Tuck box, tab lock</option>
+                                <option value="tuckFixedLock">Tuck box, fixed bottom</option>
+                                <option value="twoPieceLock">Two-piece box, folded walls</option>
+                                <option value="sleeveLock">Sleeve, tab lock</option>
+                            </optgroup>
+                            <!-- Old names, so saved settings and projects still open them (see STYLE_ALIASES). -->
+                            <option value="tuckHidden" hidden>Tuck box, tab lock</option>
+                            <option value="sleeveHidden" hidden>Sleeve, tab lock</option>
+                        </select>
+                        <div class="input-hint" id="styleHint"></div>
+                    </div>
+                    <div class="control-group" id="lidDepthGroup">
+                        <label for="lidDepth">Lid depth (% of base)</label>
+                        <input type="number" id="lidDepth" value="100" min="20" max="100" step="5">
+                    </div>
+                    <div class="control-group" id="sleeveHeightGroup">
+                        <label for="sleeveHeight">Sleeve height (% of card)</label>
+                        <input type="number" id="sleeveHeight" value="60" min="15" max="100" step="5">
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Deck <span class="help" tabindex="0" data-tip="Per card = card weight + film + sleeves. Or measure the whole deck: the rest is worked out from it.">?</span></div>
+                    <div class="control-group">
+                        <label for="cardPreset">Card size</label>
+                        <select id="cardPreset"></select>
+                    </div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="cardW">Width (mm)</label>
+                            <input type="number" id="cardW" value="63" min="10" step="0.1" data-unit="mm">
+                        </div>
+                        <div class="control-group">
+                            <label for="cardH">Height (mm)</label>
+                            <input type="number" id="cardH" value="88" min="10" step="0.1" data-unit="mm">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="cardCount">Cards</label>
+                            <input type="number" id="cardCount" value="54" min="1" step="1">
+                        </div>
+                        <div class="control-group">
+                            <label for="cardSleeves">Sleeves</label>
+                            <select id="cardSleeves">
+                                <option value="none">None</option>
+                                <option value="penny">Penny sleeves</option>
+                                <option value="premium">Premium sleeves</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="cardGsm">Card weight (GSM)</label>
+                            <input type="number" id="cardGsm" value="320" min="0" max="3000" step="10" data-persist="false">
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label class="inline"><input type="checkbox" id="cardLaminated"> Laminated cards</label>
+                    </div>
+                    <div class="row" id="cardLaminateGroup">
+                        <div class="control-group">
+                            <label for="cardLaminateThickness">Film per side (mm)</label>
+                            <input type="number" id="cardLaminateThickness" value="0.08" min="0" max="1" step="0.005" data-unit="mm">
+                        </div>
+                        <div class="control-group">
+                            <label for="cardLaminateSides">Sides</label>
+                            <select id="cardLaminateSides">
+                                <option value="2">Both</option>
+                                <option value="1">One</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="cardThickness">Per card (mm)</label>
+                            <input type="number" id="cardThickness" value="0.32" min="0.05" max="3" step="0.01" data-unit="mm">
+                        </div>
+                        <div class="control-group">
+                            <label for="deckThickness">Whole deck (mm)</label>
+                            <input type="number" id="deckThickness" value="17.28" min="0.1" step="0.1" data-unit="mm" data-persist="false">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Fit <span class="help" tabindex="0" data-tip="Clearance: room around the deck. Paper weight estimates thickness (about 1 mm per 1000 GSM); calipers are more exact. Tab lip: lower it if tabs sit loose, raise it if they're hard to push in.">?</span></div>
+                    <div class="control-group">
+                        <label for="clearance">Clearance (mm)</label>
+                        <input type="number" id="clearance" value="1" min="0" max="10" step="0.1" data-unit="mm">
+                    </div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="paperThickness">Paper thickness (mm)</label>
+                            <input type="number" id="paperThickness" value="0.3" min="0" max="2" step="0.01" data-unit="mm">
+                        </div>
+                        <div class="control-group">
+                            <label for="paperGsm">Paper weight (GSM)</label>
+                            <input type="number" id="paperGsm" value="300" min="0" max="2000" step="10" data-persist="false">
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label class="inline"><input type="checkbox" id="laminated"> Laminated</label>
+                    </div>
+                    <div class="row" id="laminateGroup">
+                        <div class="control-group">
+                            <label for="laminateThickness">Film per side (mm)</label>
+                            <input type="number" id="laminateThickness" value="0.08" min="0" max="1" step="0.005" data-unit="mm">
+                        </div>
+                        <div class="control-group">
+                            <label for="laminateSides">Sides</label>
+                            <select id="laminateSides">
+                                <option value="2">Both</option>
+                                <option value="1">One</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="input-hint" id="paperHint"></div>
+                    <div class="control-group" id="tabLipGroup">
+                        <label for="tabLip">Tab lip (× paper thickness)</label>
+                        <input type="number" id="tabLip" value="3" min="1" max="10" step="0.5">
+                        <div class="input-hint" id="tabLipHint"></div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Artwork <span class="help" tabindex="0" data-tip="Click a thumbnail to pick it for a panel, or drop an image on a panel. Fill covers the panel, Fit shows the whole image, Stretch distorts it, Extend fits it and stretches its edges.">?</span></div>
+                    <div class="dropzone" id="artDrop">
+                        <div class="dz-title">Drag &amp; drop artwork here</div>
+                        <div>or click to browse</div>
+                        <input type="file" id="artInput" multiple accept="image/png,image/jpeg,image/webp" hidden>
+                    </div>
+                    <div class="art-library" id="artLibrary"></div>
+                    <div class="slot-list" id="slotList"></div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="bgColor">Background</label>
+                            <input type="color" id="bgColor" value="#ffffff">
+                        </div>
+                        <div class="control-group">
+                            <label for="bleed">Bleed (mm)</label>
+                            <input type="number" id="bleed" value="3" min="0" max="10" step="0.5" data-unit="mm">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Print <span class="help" tabindex="0" data-tip="Printer margin: the edge your printer can't print. Turn cut and fold lines off when a machine cuts.">?</span></div>
+                    <div class="control-group">
+                        <label for="paperPreset">Paper</label>
+                        <select id="paperPreset"></select>
+                    </div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="paperW">Width (mm)</label>
+                            <input type="number" id="paperW" value="210" min="50" step="0.1" data-unit="mm">
+                        </div>
+                        <div class="control-group">
+                            <label for="paperH">Height (mm)</label>
+                            <input type="number" id="paperH" value="297" min="50" step="0.1" data-unit="mm">
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="margin">Printer margin (mm)</label>
+                        <input type="number" id="margin" value="5" min="0" max="30" step="0.5" data-unit="mm">
+                    </div>
+                    <div class="control-group">
+                        <label class="inline"><input type="checkbox" id="printCut" checked> Print cut lines</label>
+                        <label class="inline"><input type="checkbox" id="printFold" checked> Print fold lines (dashed)</label>
+                    </div>
+                    <div class="control-group">
+                        <label for="lineColor">Line colour</label>
+                        <input type="color" id="lineColor" value="#808080">
+                    </div>
+                </div>
+
+                <div class="panel" id="machinePanel">
+                    <div class="panel-title">Cutting Machine <span class="help" tabindex="0" data-tip="The mat edge your machine can't cut (Cricut: 6.35 mm).">?</span></div>
+                    <div class="control-group">
+                        <label for="machinePreset">Machine</label>
+                        <select id="machinePreset"></select>
+                    </div>
+                    <div class="control-group">
+                        <label for="machineMargin">Mat dead margin (mm)</label>
+                        <input type="number" id="machineMargin" value="6.35" min="0" step="0.01" data-unit="mm">
+                        <div class="input-hint">Keep the printer margin at least this wide.</div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Export</div>
+                    <div class="button-group">
+                        <button class="btn-primary" id="downloadPdf">Download PDF</button>
+                        <button class="btn-secondary" id="downloadSvg">Download SVG cut file</button>
+                    </div>
+                    <div class="input-hint">The SVG has cut and score layers matching the PDF.</div>
+                </div>
+            </div>
+
+            <div class="main">
+                <div class="box-summary" id="summary"></div>
+                <div class="status info" id="status" hidden></div>
+                <div class="preview-section">
+                    <div class="sheet-toolbar">
+                        <div class="preview-title">Sheets</div>
+                        <label class="inline preview-option"><input type="checkbox" id="showLabels" checked data-persist="false"> Panel labels</label>
+                    </div>
+                    <div class="sheet-grid" id="sheetGrid"></div>
+                    <div class="legend">
+                        <span><i class="swatch cut"></i> Cut</span>
+                        <span><i class="swatch fold"></i> Fold</span>
+                        <span><i class="swatch glue"></i> Glue</span>
+                        <span>Drop an image on a panel to use it as artwork.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="shared/pnp-shared.js"></script>
+    <script src="js/geometry.js"></script>
+    <script src="js/render.js"></script>
+    <script src="js/art-editor.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

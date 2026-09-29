@@ -1,0 +1,462 @@
+/* PnPTuckBox-only styles. The shared base lives in style.css (synced from the hub). */
+
+.control-group[hidden] {
+    display: none;
+}
+
+/* ---- Artwork slots --------------------------------------------------------------- */
+
+.slot-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.slot {
+    position: relative;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface2);
+}
+
+.slot.dragover {
+    border-color: var(--accent);
+    background: rgba(108, 140, 255, 0.08);
+}
+
+.slot-thumb {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    border: 1px solid transparent;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.slot-thumb:hover {
+    border-color: var(--accent);
+    background: var(--surface);
+}
+
+.slot-thumb.empty {
+    border: 1px dashed var(--border);
+}
+
+.slot-thumb img {
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.slot-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.slot-name {
+    font-size: 0.82rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.slot-mode {
+    padding: 2px 6px;
+    font-size: 0.75rem;
+    width: auto;
+    max-width: 100%;
+}
+
+/* ---- Artwork library & picker --------------------------------------------------- */
+
+#importSlot {
+    margin: 8px 0;
+}
+
+.art-library {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.art-library[hidden] {
+    display: none;
+}
+
+.art-tile {
+    position: relative;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    cursor: grab;
+}
+
+.art-tile img {
+    max-width: 100%;
+    max-height: 100%;
+    pointer-events: none;
+}
+
+/* Library images not used by any panel are dimmed. */
+.art-library .art-tile:not(.used) img {
+    opacity: 0.55;
+}
+
+.art-tile > button {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 9px;
+    line-height: 16px;
+    background: var(--surface2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    opacity: 0;
+}
+
+.art-tile:hover > button,
+.art-tile > button:focus-visible {
+    opacity: 1;
+}
+
+.art-picker {
+    position: absolute;
+    z-index: 50;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 12px 30px var(--shadow);
+}
+
+.art-picker .art-tile {
+    cursor: pointer;
+}
+
+.art-picker .art-tile:hover,
+.art-picker .art-tile.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.art-picker-action {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+}
+
+.art-picker-action:hover {
+    color: var(--text);
+    border-color: var(--accent);
+    background: var(--surface);
+}
+
+.slot-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.slot-actions button {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+}
+
+.slot-actions button:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--accent);
+    background: var(--surface);
+}
+
+/* ---- Summary, sheets, legend ---------------------------------------------------- */
+
+.box-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.summary-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+}
+
+.summary-value {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.status[hidden] {
+    display: none;
+}
+
+.sheet-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.preview-option {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.sheet-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.sheet {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.sheet canvas {
+    border-radius: 4px;
+    box-shadow: 0 4px 24px var(--shadow);
+    outline: 2px solid transparent;
+    transition: outline-color 0.15s;
+}
+
+.sheet canvas.dragover {
+    outline-color: var(--accent);
+}
+
+.sheet figcaption {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+}
+
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+}
+
+.swatch {
+    display: inline-block;
+    width: 18px;
+    height: 0;
+    vertical-align: middle;
+    margin-right: 4px;
+    border-top: 2px solid;
+}
+
+.swatch.cut {
+    border-color: #e03131;
+}
+
+.swatch.fold {
+    border-top-style: dashed;
+    border-color: #2b6cb0;
+}
+
+.swatch.glue {
+    height: 10px;
+    border: none;
+    background: rgba(64, 192, 87, 0.35);
+    border-radius: 2px;
+}
+
+/* ---- Artwork editor dialog -------------------------------------------------- */
+
+.art-editor {
+    margin: auto; /* centred; the base stylesheet zeroes margins */
+    width: min(960px, calc(100vw - 32px));
+    height: min(680px, calc(100vh - 32px));
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 24px 60px var(--shadow);
+}
+
+.art-editor[open] {
+    display: flex;
+    flex-direction: column;
+}
+
+.art-editor::backdrop {
+    background: rgba(8, 10, 16, 0.6);
+}
+
+.ae-head,
+.ae-foot {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+}
+
+.ae-head {
+    border-bottom: 1px solid var(--border);
+}
+
+.ae-head h2 {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ae-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    background: var(--surface2);
+    border-radius: 8px;
+}
+
+.ae-tabs button {
+    padding: 5px 14px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-dim);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.ae-tabs button[aria-selected="true"] {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 3px var(--shadow);
+}
+
+.ae-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+
+.ae-stage {
+    flex: 1;
+    min-width: 0;
+    background:
+        linear-gradient(45deg, var(--checker) 25%, transparent 25%),
+        linear-gradient(-45deg, var(--checker) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, var(--checker) 75%),
+        linear-gradient(-45deg, transparent 75%, var(--checker) 75%);
+    background-color: var(--surface2);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+    overflow: hidden;
+}
+
+.ae-canvas {
+    display: block;
+    touch-action: none;
+}
+
+.ae-controls {
+    width: 240px;
+    flex: none;
+    padding: 16px;
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+}
+
+.ae-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ae-group[hidden] {
+    display: none;
+}
+
+.ae-group .button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.ae-zoom-value,
+.ae-crop-size {
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    font-weight: 400;
+}
+
+.ae-foot {
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+}
+
+@media (max-width: 700px) {
+    .ae-body {
+        flex-direction: column;
+    }
+
+    .ae-controls {
+        width: auto;
+        border-left: none;
+        border-top: 1px solid var(--border);
+    }
+}
