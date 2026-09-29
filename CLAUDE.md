@@ -4,14 +4,15 @@ Guidance for working in this repository.
 
 ## What this is
 
-PnPTools is a hub for browser-only print-and-play (board game) prep tools. It uses
-plain static HTML/CSS/JS with **no build step and no bundler**. The hub's
-`package.json` exists only for the Playwright tests (see Testing below); the tools
-have no dependencies. Everything runs client-side and nothing is uploaded. The site is
-deployed on GitHub Pages at `https://nullmember.github.io/PnPTools/`.
+PnPTools is a set of browser-only print-and-play (board game) prep tools in one
+repository. It uses plain static HTML/CSS/JS with **no build step and no bundler**.
+`package.json` exists only for the Playwright tests (see Testing below). Everything
+runs client-side and nothing is uploaded. The site is deployed on GitHub Pages at
+`https://nullmember.github.io/PnPTools/`.
 
-Each tool is its **own git repo, added here as a submodule** (github.com/NullMember/<Tool>).
-Each tool is also deployed standalone on its own Pages site:
+Each tool is a folder. (They used to be separate repos added as submodules; their
+history was merged in with `git subtree`, and the old repos are archived with their
+Pages sites redirecting here.)
 
 | Folder | Purpose | Pages / entry points |
 | --- | --- | --- |
@@ -23,8 +24,9 @@ Each tool is also deployed standalone on its own Pages site:
 | `PnPCut` | Cutting-machine grids, line-art editor, sheet assembler | `index.html`, `editor.html`, `sheet.html` |
 | `PnPTuckBox` | Tuck boxes, two-piece boxes, sleeves; print PDF + cut/score SVG | `index.html`, `js/app.js`, `geometry.js`, `render.js`, `art-editor.js` (per-panel crop / zoom / pan dialog) |
 
-Hub-level files: `index.html` (landing page), `css/style.css`, `shared/`,
-`scripts/sync-shared.sh`, `sw.js`, `manifest.webmanifest`.
+Root files: `index.html` (landing page), `css/style.css` (shared base styles),
+`shared/` (shared scripts and icons), `sw.js` (the one service worker, serving every
+page), `manifest.webmanifest`.
 
 ## Running locally
 
@@ -37,8 +39,7 @@ python3 -m http.server 8000   # or any static server
 
 ## Testing
 
-The Playwright suite lives in the hub, never in tool folders, because each tool
-folder is deployed as-is:
+The Playwright suite lives in `tests/`:
 
 ```sh
 npm install && npx playwright install chromium   # once
@@ -53,46 +54,25 @@ npx playwright test tests/pnpcut-sheet.spec.js   # one file
 
 Add or update tests with every change, and run the suite before finishing. Drive
 the real UI (clicks, `setInputFiles`, drops) and assert on what the user sees or
-downloads. Load pages from the hub URL (`PnPBleed/index.html`), not `file://`.
+downloads. Load pages by their path (`PnPBleed/index.html`), not `file://`.
 The smoke test loads CDN libraries, so it needs network access.
 
-## Shared code: edit only in the hub, then sync
+## Shared code
 
-The canonical shared files live in the hub. **Never edit the per-tool copies** in
-`<tool>/shared/`, `<tool>/css/style.css`, `<tool>/sw.js` or `<tool>/manifest.webmanifest`.
-The sync overwrites them. After you change shared code, run:
+Tool pages load the shared files from the root: `../css/style.css` (base styles with
+light/dark themes; tool-specific rules go in `<tool>/css/tool.css`) and `../shared/`
+(`pnp-shared.js`, `pnp-shared.css`, `pnp-theme.js`, icons, and the vector editor:
+`pnp-editor.js`, `pnp-editor.css`, `pathgeom.js`, `raster.js`). Cross-tool links go
+through `PnP.toolUrl`/`PnP.hubUrl`, which resolve from the site root.
 
-```sh
-scripts/sync-shared.sh
-```
+If you add a tool, add it to the `TOOLS` array in `shared/pnp-shared.js` and to the
+hub `index.html`.
 
-This script copies:
-- `css/style.css` to `<tool>/css/style.css`. This is the shared base with light/dark themes. Tool-specific rules go in `<tool>/css/tool.css`.
-- `pnp-shared.js`, `pnp-shared.css`, `pnp-theme.js` and the icons to every `<tool>/shared/`.
-- The vector editor (`pnp-editor.js`, `pnp-editor.css`, `pathgeom.js`, `raster.js`) only to the tools listed in `EDITOR_TOOLS` in the script (currently PnPCut and PnPCardCrop).
-- `shared/sw.js` to `./sw.js` and to each `<tool>/sw.js`.
-
-It also regenerates each folder's `manifest.webmanifest` from the `TOOLS` table in
-the script. If you add a tool, update that table, `.gitmodules`, the `TOOLS` array
-in `shared/pnp-shared.js` and the hub `index.html`.
-
-Tools must **never load files from `../`**, because they have to work when deployed standalone.
-Cross-tool links go through `PnP` helpers (`toolUrl`/`hubUrl`), which handle the
-hub layout and the standalone layout.
-
-## Commit workflow (submodules)
-
-A shared change touches the hub and every tool repo:
-1. Edit `shared/*` or `css/style.css` in the hub, then run `scripts/sync-shared.sh`.
-2. Commit inside each submodule. By convention the message is `Sync shared runtime: <what changed>`.
-3. Commit in the hub. This commit includes the shared source change and the bumped submodule pointers.
-
-A tool-only change is committed in that submodule, then the pointer is bumped in the hub.
+## Commits
 
 **When to commit and push:**
 - Commit after every implemented feature and every fixed bug, once its tests pass. Don't batch unrelated work into one commit.
-- Push at the end of every session: each changed submodule first, then the hub, so the hub never points at submodule commits that aren't on GitHub.
-- Submodules must be on `main` before committing. After `git submodule update` they sit on a detached HEAD; run `git -C <tool> checkout main` first.
+- Push at the end of every session.
 
 ## Page conventions
 
@@ -100,17 +80,18 @@ The scripts are classic `<script>` tags, not ES modules. They expose globals (`P
 `PnPEditor`, `PathGeom`, `Raster`) and the load order matters. A typical tool page:
 
 ```html
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="../css/style.css">
 <link rel="stylesheet" href="css/tool.css">
-<script src="shared/pnp-theme.js"></script>        <!-- in <head>, prevents theme flash -->
-<link rel="stylesheet" href="shared/pnp-shared.css">
+<link rel="manifest" href="../manifest.webmanifest">
+<script src="../shared/pnp-theme.js"></script>        <!-- in <head>, prevents theme flash -->
+<link rel="stylesheet" href="../shared/pnp-shared.css">
 ...
-<script src="shared/pnp-shared.js"></script>
+<script src="../shared/pnp-shared.js"></script>
 <!-- editor pages: pathgeom.js, raster.js, pnp-editor.js (in that order) -->
 <script src="js/app.js"></script>
 ```
 
-- External libraries come from cdnjs with **pinned versions**. The service worker caches them cache-first. Current ones: pdf.js 3.11.174, pdf-lib 1.17.1, jsPDF 2.5.1, JSZip 3.10.1, FileSaver 2.0.5. Only `cdnjs.cloudflare.com` and Google Fonts hosts are cached (`CDN_HOSTS` in `shared/sw.js`).
+- External libraries come from cdnjs with **pinned versions**. The service worker caches them cache-first. Current ones: pdf.js 3.11.174, pdf-lib 1.17.1, jsPDF 2.5.1, JSZip 3.10.1, FileSaver 2.0.5. Only `cdnjs.cloudflare.com` and Google Fonts hosts are cached (`CDN_HOSTS` in `sw.js`).
 - All lengths are stored in **millimetres**. Mark length inputs with `data-unit="mm"`. `PnP.units` adds an mm/inch display proxy, and `.value` still returns mm.
 - Sidebar `input`/`select`/`textarea` elements that have an `id` are auto-persisted to localStorage by `PnP.settings`. Use `data-persist="false"` to opt a field out. Use `data-persist="project"` to save a field only in `.pnp` project files.
 - localStorage keys use the `pnp:` prefix (e.g. `pnp:theme`, `pnp:units`).
@@ -147,7 +128,7 @@ the mask, distance-transform and outline-tracing helpers.
 
 ## Offline / PWA
 
-`shared/sw.js` fetches same-origin files network-first and pinned CDN files cache-first.
-Pages post the resources they load so the worker precaches them. Bump `CACHE`
-(`pnptools-vN`) when old caches need dropping. A service worker must sit next to the
-pages it controls, which is why each tool root has a copy.
+`sw.js` (at the root, serving every page) fetches same-origin files network-first and
+pinned CDN files cache-first. Pages post the resources they load so the worker
+precaches them. Bump `CACHE` (`pnptools-vN`) when old caches need dropping. Pages
+unregister any other service worker (the per-tool ones from before the merge).

@@ -1,6 +1,5 @@
-// PnPTools offline support. Canonical copy lives in the hub's shared/ folder;
-// scripts/sync-shared.sh copies it to the hub root and every tool root (a
-// service worker only controls pages at or below its own folder).
+// PnPTools offline support: one service worker at the site root serves the
+// hub and every tool page.
 //
 // - Same-origin files: network first, so users always get the latest version
 //   when online, falling back to the cache when offline.
@@ -8,7 +7,7 @@
 // - Pages post the list of resources they loaded, so everything a tool needs
 //   is cached right after the first visit.
 
-const CACHE = 'pnptools-v2'; // bump to drop old caches (v1 held opaque font copies)
+const CACHE = 'pnptools-v3'; // bump to drop old caches (v2: per-tool copies)
 const CDN_HOSTS = ['cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', () => self.skipWaiting());

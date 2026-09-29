@@ -21,7 +21,8 @@
     'use strict';
 
     const MM_PER_IN = 25.4;
-    const HUB_URL = 'https://nullmember.github.io/PnPTools/';
+    // The site root (the folder above shared/), wherever the site is served.
+    const ROOT = new URL('../', document.currentScript.src).href;
 
     const TOOLS = [
         { id: 'PnPCardCrop', name: 'CardCrop', icon: '✂️', path: 'PnPCardCrop/index.html' },
@@ -130,21 +131,13 @@
         setTimeout(() => node.remove(), 4000);
     }
 
-    // True when served as a standalone per-tool GitHub Pages site, where "../"
-    // is not the hub.
-    function isStandaloneDeploy() {
-        return location.hostname.endsWith('github.io') && !/^\/PnPTools\//i.test(location.pathname);
-    }
-
-    // Relative URL from the current tool page to another tool (or the hub).
-    // Tools live one folder below the hub, and standalone deploys sit side by
-    // side on the same origin, so "../<Tool>/" works in both layouts.
+    // URLs of another tool and of the hub page.
     function toolUrl(tool) {
-        return `../${tool.path}`;
+        return new URL(tool.path, ROOT).href;
     }
 
     function hubUrl() {
-        return isStandaloneDeploy() ? HUB_URL : '../index.html';
+        return new URL('index.html', ROOT).href;
     }
 
     // The unit layer overrides .value on mm inputs; nativeValue reads the raw
@@ -1606,14 +1599,19 @@ ${content(([x, y]) => [x - m, y - m])}
 
     // ---------------------------------------------------------------- offline
 
-    // Registers the folder's service worker (sw.js next to the page) and asks
-    // it to cache everything this page loaded plus any `extra` files the tool
-    // only loads later (workers, lazily fetched libraries).
+    // Registers the site's service worker (sw.js at the root, serving every
+    // page) and asks it to cache everything this page loaded plus any `extra`
+    // files the tool only loads later (workers, lazily fetched libraries).
     function enableOffline(extra = []) {
         if (!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
         window.addEventListener('load', async () => {
             try {
-                await navigator.serviceWorker.register('sw.js');
+                // Tools used to have a worker each, in their own folder; a leftover
+                // one would keep serving that tool from an old cache.
+                for (const old of await navigator.serviceWorker.getRegistrations()) {
+                    if (old.scope !== ROOT) await old.unregister();
+                }
+                await navigator.serviceWorker.register(new URL('sw.js', ROOT).href, { scope: ROOT });
                 const reg = await navigator.serviceWorker.ready;
                 const loaded = performance.getEntriesByType('resource').map((e) => e.name);
                 const urls = [location.href.split('#')[0], ...loaded, ...extra.map((u) => new URL(u, location.href).href)]
