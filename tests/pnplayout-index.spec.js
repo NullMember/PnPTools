@@ -383,3 +383,29 @@ test('each mode shows only its own settings', async ({ page }) => {
   await page.selectOption('#packMode', 'fold');
   expect(await visible()).toEqual({ precisionGroup: false, cropMarksGroup: true, gridSizeGroup: true, foldGroup: true });
 });
+
+test('back pages get crop marks mirrored like the backs', async ({ page }) => {
+  await page.selectOption('#packMode', 'grid');
+  await page.setInputFiles('#imageInput', await card(page, 300));
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Add backs…' }).click()]);
+  await chooser.setFiles(await card(page, 300, { name: 'Back.png' }));
+  await expect(status(page)).toContainText('1 back page(s)');
+  const marks = await page.evaluate(() => {
+    const s = readSettings();
+    return { front: pageMarks(state.layout, s.paper, s, 'front'), back: pageMarks(state.layout, s.paper, s, 'back') };
+  });
+  expect(marks.back).toHaveLength(marks.front.length);
+  // A4 portrait, long-edge flip: mirrored left to right.
+  marks.front.forEach(([x1, y1], i) => {
+    expect(marks.back[i][0]).toBeCloseTo(210 - x1, 5);
+    expect(marks.back[i][1]).toBeCloseTo(y1, 5);
+  });
+  await page.locator('#sideToggle').getByRole('button', { name: 'Back' }).click();
+  const drawn = await page.evaluate(() => {
+    const c = document.querySelector('#sheetGrid canvas');
+    const k = c.width / 210;
+    const [r, g, b] = c.getContext('2d').getImageData(Math.round((210 - 8.5) * k), Math.round(10 * k), 1, 1).data;
+    return r + g + b < 700;
+  });
+  expect(drawn).toBe(true);
+});
