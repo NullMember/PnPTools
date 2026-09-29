@@ -48,7 +48,7 @@ const GLUELESS = [
 for (const [style, pieces, slits, folds, option] of GLUELESS) {
   test(`${style}: one closed outline per piece, its slits and folds`, async ({ page }) => {
     await selectStyle(page, style);
-    await expect(page.locator('#styleHint')).toContainText('No glue');
+    await expect(page.locator('#styleHint')).toContainText('tab'); // how the tabs lock
     for (const group of ['#lidDepthGroup', '#sleeveHeightGroup']) {
       if (group === option) await expect(page.locator(group)).toBeVisible();
       else await expect(page.locator(group)).toBeHidden();
@@ -93,7 +93,7 @@ test('a thick deck still gives a two-piece box without glue that fits A4', async
 
   // Past that the lid is wider than A4's printable area, and the page says so.
   await setCardCount(page, 100);
-  await expect(page.locator('#status')).toContainText('larger than the printable area');
+  await expect(page.locator('#status')).toContainText('doesn’t fit this paper');
 });
 
 // Tuck lock slits are cut along the tuck flap's fold; the fold must run up

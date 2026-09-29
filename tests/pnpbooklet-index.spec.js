@@ -35,7 +35,7 @@ test('a long PDF keeps only small thumbnails in memory', async ({ page }) => {
 
 test('the preview draws the pages of the side shown, and pages through', async ({ page }) => {
   await page.setInputFiles('#fileInput', await makePdf(page, 20));
-  await expect(sideLabel(page)).toContainText('1 of 5');
+  await expect(sideLabel(page)).toContainText('1 of 10'); // two pages to a sheet by default
   // Middle of the first cell is the page's colour, not the white sheet.
   const colourAt = () => page.evaluate(() => {
     const c = document.querySelector('.preview-page canvas');
@@ -47,9 +47,9 @@ test('the preview draws the pages of the side shown, and pages through', async (
   });
   expect(await colourAt()).not.toEqual([255, 255, 255]);
 
-  for (let i = 2; i <= 5; i++) {
+  for (let i = 2; i <= 10; i++) {
     await page.getByRole('button', { name: 'Next side' }).click();
-    await expect(sideLabel(page)).toContainText(`${i} of 5`);
+    await expect(sideLabel(page)).toContainText(`${i} of 10`);
   }
   expect(await colourAt()).not.toEqual([255, 255, 255]);
   expect(await page.evaluate(() => renderCache.size)).toBeLessThanOrEqual(12);
@@ -71,5 +71,11 @@ test('exports a PDF with one page per sheet side', async ({ page }) => {
   expect(pdf.name).toBe('Rules_sheets.pdf');
   const text = fs.readFileSync(pdf.path, 'latin1');
   expect(text.startsWith('%PDF')).toBe(true);
-  expect((text.match(/\/Type \/Page\b/g) || []).length).toBe(2); // 6 pages, 4 per side
+  expect((text.match(/\/Type \/Page\b/g) || []).length).toBe(3); // 6 pages, 2 per side
+});
+
+test('pages use paper sizes, and card sheets go to Layout', async ({ page }) => {
+  await expect(page.locator('#pagePreset')).toHaveValue('a5');
+  await expect(page.locator('#pagePreset option', { hasText: 'Poker' })).toHaveCount(0);
+  await expect(page.locator('#sendSlot').getByRole('button', { name: /Layout/ })).toBeVisible();
 });
