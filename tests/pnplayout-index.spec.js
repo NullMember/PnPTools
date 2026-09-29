@@ -5,12 +5,13 @@ const { test, expect, download, makeCardImages } = require('./helpers');
 const status = (page) => page.locator('#status');
 const rows = (page) => page.locator('#pieceList .piece');
 
-// A plain 63 × 88 mm card image at `dpi`, with the DPI recorded or not.
-async function card(page, dpi, { record = true, name = 'Card.png' } = {}) {
-  const b64 = await page.evaluate(async ({ dpi, record }) => {
+// A plain 63 × 88 mm card image at `dpi`, with the DPI recorded or not;
+// `bleed` mm of bleed around it makes the image that much bigger.
+async function card(page, dpi, { record = true, name = 'Card.png', bleed = 0 } = {}) {
+  const b64 = await page.evaluate(async ({ dpi, record, bleed }) => {
     const c = document.createElement('canvas');
-    c.width = Math.round(63 / 25.4 * dpi);
-    c.height = Math.round(88 / 25.4 * dpi);
+    c.width = Math.round((63 + 2 * bleed) / 25.4 * dpi);
+    c.height = Math.round((88 + 2 * bleed) / 25.4 * dpi);
     const g = c.getContext('2d');
     g.fillStyle = '#3366cc';
     g.fillRect(0, 0, c.width, c.height);
@@ -20,7 +21,7 @@ async function card(page, dpi, { record = true, name = 'Card.png' } = {}) {
     let s = '';
     bytes.forEach((b) => { s += String.fromCharCode(b); });
     return btoa(s);
-  }, { dpi, record });
+  }, { dpi, record, bleed });
   return { name, mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') };
 }
 
@@ -153,5 +154,50 @@ test.describe('grid mode', () => {
     await expect(status(page)).toContainText('2 back page(s)');
     const pdf = await download(page, () => page.click('#downloadPdf'));
     expect(await pdfPages(page, pdf)).toBe(4);
+  });
+});
+
+test.describe('images that already include bleed', () => {
+  const piece = (page) => page.evaluate(() => {
+    const p = [...state.pieces.values()][0];
+    const s = readSettings();
+    const outline = outlineOnSheet(p, { cx: 0, cy: 0, angle: 0 });
+    const xs = outline.map(([x]) => x), ys = outline.map(([, y]) => y);
+    return {
+      widthMm: p.widthMm,
+      heightMm: pieceHeightMm(p),
+      cutW: Math.max(...xs) - Math.min(...xs),
+      cutH: Math.max(...ys) - Math.min(...ys),
+      printedExtra: faceComposite(p, p.front, s.bleed).extraMm,
+    };
+  });
+
+  test('the card inside the bleed sets the size and the cut line', async ({ page }) => {
+    await page.fill('#bleed__display', '0');
+    await page.setInputFiles('#imageInput', await card(page, 300, { bleed: 3 }));
+    await expect(status(page)).toContainText('1 piece(s)');
+    expect((await piece(page)).widthMm).toBeCloseTo(69, 0); // the whole image
+
+    await page.fill('#imageBleed__display', '3');
+    await page.press('#imageBleed__display', 'Tab');
+    await expect.poll(async () => (await piece(page)).widthMm).toBeCloseTo(63, 0);
+    const p = await piece(page);
+    expect(p.heightMm).toBeCloseTo(88, 0);
+    expect(p.cutW).toBeCloseTo(63, 0);
+    expect(p.cutH).toBeCloseTo(88, 0);
+    expect(p.printedExtra).toBeCloseTo(3, 1); // the image's own bleed is still printed
+  });
+
+  test('pieces added later are trimmed too, and grid gaps leave room for the bleed', async ({ page }) => {
+    await page.fill('#bleed__display', '0');
+    await page.fill('#spacing__display', '0');
+    await page.fill('#imageBleed__display', '3');
+    await page.press('#imageBleed__display', 'Tab');
+    await page.selectOption('#packMode', 'grid');
+    await page.setInputFiles('#imageInput', await card(page, 300, { bleed: 3 }));
+    await expect(status(page)).toContainText('1 piece(s)');
+    expect((await piece(page)).widthMm).toBeCloseTo(63, 0);
+    const grid = await page.evaluate(() => state.layout.grid);
+    expect(grid.gap).toBeCloseTo(3, 5); // bleed of one card may reach the next card's cut, no further
   });
 });
