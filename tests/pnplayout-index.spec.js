@@ -301,8 +301,8 @@ test.describe('fold mode', () => {
   });
 
   test('a horizontal fold turns the backs upside down', async ({ page }) => {
-    await page.selectOption('#foldDirection', 'horizontal');
     await setup(page, { qty: 3 });
+    await page.selectOption('#foldDirection', 'horizontal');
     await rows(page).getByLabel('Allow rotation').uncheck();
     await expect(status(page)).toContainText('3 × 1 per sheet, backs across a horizontal fold');
     const { sheets, fold } = await layout(page);
@@ -337,4 +337,49 @@ test.describe('fold mode', () => {
     marks.forEach(([x1, , x2]) => expect(Math.max(x1, x2)).toBeLessThan(fold.at));
     expect((await layout(page)).fold.backs[0]).toHaveLength(0); // no back image, nothing mirrored
   });
+});
+
+test.describe('grid size', () => {
+  const manual = async (page, cols, rows) => {
+    await page.selectOption('#gridSizeMode', 'manual');
+    await page.fill('#gridCols', String(cols));
+    await page.fill('#gridRows', String(rows));
+  };
+
+  test('rows and columns can be set by hand', async ({ page }) => {
+    await page.selectOption('#packMode', 'grid');
+    await expect(page.locator('#gridCountGroup')).toBeHidden();
+    await page.setInputFiles('#imageInput', await card(page, 300));
+    await rows(page).getByLabel('Quantity').fill('5');
+    await manual(page, 2, 2);
+    await expect(page.locator('#gridCountGroup')).toBeVisible();
+    await expect(status(page)).toContainText('5 piece(s) on 2 sheet(s)');
+    await expect(status(page)).toContainText('2 × 2 per sheet');
+  });
+
+  test('a grid that only fits on its side turns the cards', async ({ page }) => {
+    await page.selectOption('#packMode', 'grid');
+    await page.setInputFiles('#imageInput', await card(page, 300));
+    await manual(page, 2, 4); // A4: 3 × 3 upright, 2 × 4 turned
+    await expect(status(page)).toContainText('2 × 4 per sheet');
+    expect(await page.evaluate(() => state.layout.sheets[0][0].angle)).toBe(90);
+  });
+
+  test('a grid too big for the page says so and uses the most that fits', async ({ page }) => {
+    await page.selectOption('#packMode', 'grid');
+    await page.setInputFiles('#imageInput', await card(page, 300));
+    await rows(page).getByLabel('Allow rotation').uncheck();
+    await manual(page, 5, 5);
+    await expect(status(page)).toContainText("A 5 × 5 grid doesn't fit the printable area; using the most that fits: 3 × 3");
+  });
+});
+
+test('each mode shows only its own settings', async ({ page }) => {
+  const visible = async () => Object.fromEntries(await Promise.all(
+    ['precisionGroup', 'cropMarksGroup', 'gridSizeGroup', 'foldGroup'].map(async (id) => [id, await page.locator(`#${id}`).isVisible()])));
+  expect(await visible()).toEqual({ precisionGroup: true, cropMarksGroup: false, gridSizeGroup: false, foldGroup: false });
+  await page.selectOption('#packMode', 'grid');
+  expect(await visible()).toEqual({ precisionGroup: false, cropMarksGroup: true, gridSizeGroup: true, foldGroup: false });
+  await page.selectOption('#packMode', 'fold');
+  expect(await visible()).toEqual({ precisionGroup: false, cropMarksGroup: true, gridSizeGroup: true, foldGroup: true });
 });
