@@ -10,7 +10,7 @@
 //   PnP.bindMachinePreset() / cutSvg()  cutting-machine dead margin + guide-framed SVG cut files
 //   PnP.handoff                    pass image sets between tools (IndexedDB)
 //   PnP.sendMenu() / filePicker()  send files to a tool / pick recorded files
-//   PnP.outputPreviewButton() / previewOutput()  browse stored tool inputs and outputs in a viewer
+//   PnP.outputPreviewButton() / previewOutput()  the project library, and a viewer for its files
 //   PnP.recordFiles()              remember a tool's inputs / outputs for that viewer
 //   PnP.project                    .pnp project files (zip: manifest.json + files/)
 //   PnP.guard()                    warn before leaving with unsaved work
@@ -819,11 +819,15 @@ ${content(([x, y]) => [x - m, y - m])}
             saveTimer = setTimeout(flush, 150);
         }
         // A change made just before leaving is still saved.
+        const storeListeners = [];
+        // Returns whether there was anything to save.
         function flush() {
-            if (saveTimer === null) return;
+            if (saveTimer === null) return false;
             clearTimeout(saveTimer);
             saveTimer = null;
             storageSet(key, collect('local'));
+            storeListeners.forEach((fn) => fn());
+            return true;
         }
 
         function init(tool, rootEl) {
@@ -843,39 +847,22 @@ ${content(([x, y]) => [x - m, y - m])}
             storageRemove(key);
         }
 
-        return { init, collect, apply, reset, onApply: (fn) => applyListeners.push(fn) };
+        // What localStorage holds for this page (after a project was opened).
+        const saved = () => storageGet(key, null);
+
+        return { init, collect, apply, reset, saved, flush, onApply: (fn) => applyListeners.push(fn), onStore: (fn) => storeListeners.push(fn) };
     })();
 
     // ---------------------------------------------------------------- guard
 
-    // Work counts as unsaved when a tool's hasUnsavedWork() says so and the
-    // user has done something since the project was last saved or opened.
-    // Anything they do outside the top bar (typing, clicking, dropping)
-    // counts, which may warn after a harmless click, but never misses a change.
+    // Tools say whether they hold work (hasUnsavedWork). The work itself is
+    // kept in the project as the user goes (see project), so leaving the
+    // page doesn't need a warning.
     const guards = [];
     function guard(hasUnsavedWork) {
         guards.push(hasUnsavedWork);
     }
     let guardBypass = false;
-    let touchedSinceSave = true;
-    const markClean = () => { touchedSinceSave = false; };
-    const OUTSIDE_WORK = '.pnp-topbar, .pnp-popover, .pnp-toasts, .pnp-viewer';
-    ['input', 'change', 'drop', 'click', 'keydown'].forEach((type) => document.addEventListener(type, (e) => {
-        if (!e.isTrusted || touchedSinceSave) return;
-        if (type === 'keydown' && (e.ctrlKey || e.metaKey || e.altKey || e.key.length > 1 && !/^(Delete|Backspace|Enter|Arrow)/.test(e.key))) return;
-        if (e.target instanceof Element && e.target.closest(OUTSIDE_WORK)) return;
-        touchedSinceSave = true;
-    }, true));
-    function hasUnsaved() {
-        return touchedSinceSave && guards.some((fn) => { try { return fn(); } catch (err) { return false; } });
-    }
-    window.addEventListener('beforeunload', (e) => {
-        if (guardBypass) return;
-        if (hasUnsaved()) {
-            e.preventDefault();
-            e.returnValue = '';
-        }
-    });
 
     // ---------------------------------------------------------------- handoff
 
@@ -948,6 +935,7 @@ ${content(([x, y]) => [x - m, y - m])}
             const params = new URLSearchParams(location.search);
             const id = params.get('import');
             if (!id) return;
+            await project.ready(); // after the page's own work is back
             params.delete('import');
             const clean = location.pathname + (params.toString() ? `?${params}` : '') + location.hash;
             history.replaceState(null, '', clean);
@@ -975,6 +963,237 @@ ${content(([x, y]) => [x - m, y - m])}
         return { list, save, get, remove, removeFromPage, clear, receive, kindOf, sizeOf, MAX_BYTES };
     })();
 
+    // ---------------------------------------------------------------- project store
+
+    // The open project lives in IndexedDB, so every tool page sees it and
+    // nothing is lost on reload:
+    //   blobs    content hash -> Blob. Files are stored once, however many
+    //            batches and pages use them.
+    //   batches  the library: files loaded into or made by the tools, in
+    //            batches ({ id, from, kind: 'input' | 'output', created, items })
+    //   pages    each tool page's work ({ key, fields, state, files }), saved as
+    //            the user works and restored when the page opens
+    //   info     'project' -> { name, changed, saved } (timestamps)
+    // Items and files are refs: { name, hash, type, size, role }.
+    const store = (() => {
+        const DB = 'pnptools-project';
+        let dbPromise = null;
+
+        function open() {
+            if (!dbPromise) {
+                dbPromise = new Promise((resolve, reject) => {
+                    const req = indexedDB.open(DB, 1);
+                    req.onupgradeneeded = () => {
+                        const db = req.result;
+                        db.createObjectStore('blobs');
+                        db.createObjectStore('batches', { keyPath: 'id' });
+                        db.createObjectStore('pages', { keyPath: 'key' });
+                        db.createObjectStore('info');
+                    };
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            }
+            return dbPromise;
+        }
+
+        // Run fn(...objectStores) in one transaction; resolves with fn's
+        // request result (if it returned a request) once it commits.
+        async function tx(names, mode, fn) {
+            const db = await open();
+            return new Promise((resolve, reject) => {
+                const t = db.transaction(names, mode);
+                const out = fn(...names.map((n) => t.objectStore(n)));
+                t.oncomplete = () => resolve(out && typeof out === 'object' && 'result' in out ? out.result : out);
+                t.onerror = () => reject(t.error);
+                t.onabort = () => reject(t.error);
+            });
+        }
+
+        // SHA-256 of a blob's bytes, remembered per Blob object.
+        const hashes = new WeakMap();
+        async function hashOf(blob) {
+            if (hashes.has(blob)) return hashes.get(blob);
+            let hash;
+            if (window.crypto && crypto.subtle) {
+                const digest = await crypto.subtle.digest('SHA-256', await blob.arrayBuffer());
+                hash = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+            } else {
+                hash = `x${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`; // no dedup without crypto
+            }
+            hashes.set(blob, hash);
+            return hash;
+        }
+
+        // Store the files ([{ name, blob, role }]) and return their refs.
+        async function putFiles(items) {
+            const refs = [];
+            const fresh = new Map();
+            const known = new Set(await tx(['blobs'], 'readonly', (b) => b.getAllKeys()));
+            for (const it of items) {
+                if (!it || !it.blob) continue;
+                const hash = await hashOf(it.blob);
+                refs.push({ name: it.name, hash, type: it.blob.type || typeFromName(it.name), size: it.blob.size, role: it.role || null });
+                if (!known.has(hash)) fresh.set(hash, it.blob);
+            }
+            if (fresh.size) await tx(['blobs'], 'readwrite', (b) => fresh.forEach((blob, hash) => b.put(blob, hash)));
+            return refs;
+        }
+
+        // Refs back to { name, blob, role } items (missing blobs are left out).
+        async function resolve(refs) {
+            const blobs = await tx(['blobs'], 'readonly', (b) => {
+                const out = [];
+                refs.forEach((r) => { const req = b.get(r.hash); req.onsuccess = () => { out.push([r, req.result]); }; });
+                return out;
+            });
+            return refs.map((r) => {
+                const found = blobs.find(([ref]) => ref === r);
+                const blob = found && found[1];
+                if (!blob) return null;
+                hashes.set(blob, r.hash);
+                return { name: r.name, blob, role: r.role || null };
+            }).filter(Boolean);
+        }
+
+        const signature = (kind, from, refs) => JSON.stringify([kind, from, refs.map((r) => r.hash)]);
+
+        // A batch of files in the library. Adding the same files again only
+        // moves that batch to the top.
+        async function addBatch({ kind = 'output', from, items }) {
+            const refs = await putFiles(items);
+            if (!refs.length) return null;
+            const sig = signature(kind, from, refs);
+            const same = (await tx(['batches'], 'readonly', (b) => b.getAll())).find((x) => x.sig === sig);
+            const id = same ? same.id : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+            await tx(['batches'], 'readwrite', (b) => b.put({ id, from, kind, sig, created: Date.now(), items: refs }));
+            await touch();
+            return id;
+        }
+
+        // Library batches, newest first, with their files.
+        async function listBatches() {
+            const all = (await tx(['batches'], 'readonly', (b) => b.getAll())) || [];
+            all.sort((a, b) => b.created - a.created);
+            for (const batch of all) batch.items = await resolve(batch.items);
+            return all;
+        }
+
+        async function removeBatch(id) {
+            await tx(['batches'], 'readwrite', (b) => b.delete(id));
+            await touch();
+            await collect();
+        }
+
+        async function clearBatches() {
+            await tx(['batches'], 'readwrite', (b) => b.clear());
+            await touch();
+            await collect();
+        }
+
+        async function savePage(key, { fields, state, files }) {
+            const refs = await putFiles(files || []);
+            await tx(['pages'], 'readwrite', (p) => p.put({ key, fields: fields || {}, state: state === undefined ? null : state, files: refs, updated: Date.now() }));
+            await touch();
+        }
+
+        // A page's saved work with its files as File objects, or null.
+        async function loadPage(key) {
+            const page = await tx(['pages'], 'readonly', (p) => p.get(key));
+            if (!page) return null;
+            const items = await resolve(page.files || []);
+            return { ...page, files: itemsToFiles(items) };
+        }
+
+        async function getInfo() {
+            return (await tx(['info'], 'readonly', (i) => i.get('project'))) || { name: '', changed: 0, saved: 0 };
+        }
+
+        async function setInfo(patch) {
+            const next = { ...(await getInfo()), ...patch };
+            await tx(['info'], 'readwrite', (i) => i.put(next, 'project'));
+            return next;
+        }
+
+        // Something in the project changed (for "unsaved" and other tabs).
+        async function touch() {
+            await setInfo({ changed: Date.now() });
+            channel && channel.postMessage('changed');
+        }
+
+        // Delete blobs nothing refers to any more.
+        async function collect() {
+            const [batches, pages, keys] = await Promise.all([
+                tx(['batches'], 'readonly', (b) => b.getAll()),
+                tx(['pages'], 'readonly', (p) => p.getAll()),
+                tx(['blobs'], 'readonly', (b) => b.getAllKeys()),
+            ]);
+            const used = new Set();
+            batches.forEach((b) => b.items.forEach((r) => used.add(r.hash)));
+            pages.forEach((p) => (p.files || []).forEach((r) => used.add(r.hash)));
+            const unused = keys.filter((k) => !used.has(k));
+            if (unused.length) await tx(['blobs'], 'readwrite', (b) => unused.forEach((k) => b.delete(k)));
+        }
+
+        // Empty the whole project (library, pages, name).
+        async function clearProject() {
+            await tx(['blobs', 'batches', 'pages', 'info'], 'readwrite', (b, ba, p, i) => { b.clear(); ba.clear(); p.clear(); i.clear(); });
+            channel && channel.postMessage('changed');
+        }
+
+        async function isEmpty() {
+            const [batches, pages] = await Promise.all([
+                tx(['batches'], 'readonly', (b) => b.count()),
+                tx(['pages'], 'readonly', (p) => p.getAll()),
+            ]);
+            return !batches && pages.every((p) => !(p.files || []).length && (p.state === null || p.state === undefined));
+        }
+
+        async function sizeUsed() {
+            const batches = await tx(['batches'], 'readonly', (b) => b.getAll());
+            const seen = new Map();
+            batches.forEach((b) => b.items.forEach((r) => seen.set(r.hash, r.size || 0)));
+            return [...seen.values()].reduce((n, x) => n + x, 0);
+        }
+
+        // Everything, for a project file: records plus the blobs they use.
+        async function dump() {
+            const [batches, pages, info, hashesInUse] = await Promise.all([
+                tx(['batches'], 'readonly', (b) => b.getAll()),
+                tx(['pages'], 'readonly', (p) => p.getAll()),
+                getInfo(),
+                tx(['blobs'], 'readonly', (b) => b.getAllKeys()),
+            ]);
+            const blobs = new Map();
+            await tx(['blobs'], 'readonly', (b) => hashesInUse.forEach((k) => { const req = b.get(k); req.onsuccess = () => blobs.set(k, req.result); }));
+            return { batches, pages, info, blobs };
+        }
+
+        // Replace the project with a dump ({ batches, pages, info, blobs }).
+        async function load({ batches, pages, info, blobs }) {
+            await tx(['blobs', 'batches', 'pages', 'info'], 'readwrite', (b, ba, p, i) => {
+                b.clear(); ba.clear(); p.clear(); i.clear();
+                blobs.forEach((blob, hash) => b.put(blob, hash));
+                batches.forEach((x) => ba.put(x));
+                pages.forEach((x) => p.put(x));
+                i.put(info, 'project');
+            });
+            blobs.forEach((blob, hash) => hashes.set(blob, hash));
+            channel && channel.postMessage('changed');
+        }
+
+        // Other tabs of the site hear about changes (to refresh the library).
+        const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('pnptools-project') : null;
+        const listeners = [];
+        if (channel) channel.onmessage = () => listeners.forEach((fn) => fn());
+
+        return {
+            addBatch, listBatches, removeBatch, clearBatches, savePage, loadPage, getInfo, setInfo,
+            clearProject, isEmpty, sizeUsed, dump, load, hashOf, putFiles, resolve, touch, collect,
+            onChange: (fn) => listeners.push(fn),
+        };
+    })();
+
     // ---------------------------------------------------------------- recorded files
 
     let currentTool = null; // TOOLS entry of this page, set by init()
@@ -991,17 +1210,17 @@ ${content(([x, y]) => [x - m, y - m])}
         ? (type || '').startsWith(a.slice(0, -1))
         : type === a || name.toLowerCase().endsWith(a)));
 
-    // Remember files a tool took in or produced, for the Inputs & outputs
-    // viewer (and "Import from other tools"). Never throws: it's a convenience.
+    // Put files a tool took in or produced into the project's library.
+    // Never throws: the tool's own work doesn't depend on it.
     async function recordFiles({ kind = 'output', items, from } = {}) {
         from = from || (currentTool && currentTool.name);
         if (!from || !items || !items.length || !window.indexedDB) return null;
         try {
             const list = items.filter((it) => it && it.blob).map((it) => ({ name: it.name, blob: it.blob, role: it.role || null }));
             if (!list.length) return null;
-            return await handoff.save({ name: `${list.length} file(s) ${kind === 'input' ? 'loaded in' : 'from'} ${from}`, from, items: list, kind });
+            return await store.addBatch({ kind, from, items: list });
         } catch (err) {
-            console.warn('Could not record files:', err);
+            console.warn('Could not add files to the library:', err);
             return null;
         }
     }
@@ -1084,7 +1303,7 @@ ${content(([x, y]) => [x - m, y - m])}
         const { filter, browse, footer } = opts;
         pop.innerHTML = '';
         let sets = [];
-        try { sets = await handoff.list(); } catch (err) { /* IndexedDB unavailable */ }
+        try { sets = await store.listBatches(); } catch (err) { /* IndexedDB unavailable */ }
         if (filter) sets = sets.filter((set) => set.items.some(filter));
         if (browse) {
             pop.append(h('div', { class: 'pnp-popover-row' }, h('button', {
@@ -1094,25 +1313,24 @@ ${content(([x, y]) => [x - m, y - m])}
             }, h('strong', {}, 'Browse files on this device…'))));
         }
         if (sets.length === 0) {
-            pop.append(h('div', { class: 'pnp-popover-empty' }, 'Nothing here yet. Files you load into or export from a PnPTools tool show up here.'));
+            pop.append(h('div', { class: 'pnp-popover-empty' }, 'Nothing here yet. Files you load into or export from the tools show up here.'));
         }
         [['output', 'Outputs'], ['input', 'Inputs']].forEach(([kind, title]) => {
-            const group = sets.filter((set) => handoff.kindOf(set) === kind);
+            const group = sets.filter((set) => set.kind === kind);
             if (!group.length) return;
             pop.append(h('div', { class: 'pnp-popover-heading' }, title));
             group.forEach((set) => appendSetRow(pop, set, onPick, opts));
         });
-        // The viewer shows the space used and can empty the list.
+        // The library view shows the space used and can empty the library.
         if (footer && sets.length) {
-            const used = sets.reduce((n, set) => n + handoff.sizeOf(set), 0);
             pop.append(h('div', { class: 'pnp-popover-footer' },
-                h('span', {}, `${formatBytes(used)} of ${formatBytes(handoff.MAX_BYTES)} used; the oldest go first`),
+                h('span', {}, `${formatBytes(await store.sizeUsed())} in this project`),
                 h('button', {
                     type: 'button',
                     class: 'pnp-popover-clear',
                     onclick: async (ev) => {
                         ev.stopPropagation();
-                        await handoff.clear();
+                        await store.clearBatches();
                         renderOutputList(pop, onPick, opts);
                     },
                 }, 'Clear all')));
@@ -1120,22 +1338,22 @@ ${content(([x, y]) => [x - m, y - m])}
     }
 
     function appendSetRow(pop, set, onPick, opts) {
-        pop.append(h('div', { class: 'pnp-popover-row', 'data-kind': handoff.kindOf(set) },
+        pop.append(h('div', { class: 'pnp-popover-row', 'data-kind': set.kind },
             h('button', {
                 type: 'button',
                 class: 'pnp-popover-item',
                 onclick: () => { pop.hidden = true; onPick(set); },
             },
             h('strong', {}, describeSet(set)),
-            h('span', {}, ` ${handoff.kindOf(set) === 'input' ? 'loaded in' : 'from'} ${toolLabel(set.from)} · ${formatBytes(handoff.sizeOf(set))} · ${timeAgo(set.created)}`)),
+            h('span', {}, ` ${set.kind === 'input' ? 'loaded in' : 'from'} ${toolLabel(set.from)} · ${formatBytes(set.items.reduce((n, it) => n + it.blob.size, 0))} · ${timeAgo(set.created)}`)),
             h('button', {
                 type: 'button',
                 class: 'pnp-popover-remove',
-                title: 'Remove from list',
-                'aria-label': 'Remove from list',
+                title: 'Remove from library',
+                'aria-label': 'Remove from library',
                 onclick: async (ev) => {
                     ev.stopPropagation();
-                    await handoff.remove(set.id);
+                    await store.removeBatch(set.id);
                     renderOutputList(pop, onPick, opts);
                 },
             }, '✕')));
@@ -1179,16 +1397,16 @@ ${content(([x, y]) => [x - m, y - m])}
         return wrap;
     }
 
-    // "Pick from Inputs & outputs": a button whose popover lists the recorded
+    // "Pick from library": a button whose popover lists the library batches
     // file sets holding files this input accepts; picking one passes those
     // files to onFiles. browse() adds a "Browse files…" entry (for buttons
     // that replace a plain file input).
-    function filePicker(container, { accept, onFiles, browse, label = 'Pick from Inputs & outputs', title, buttonClass = 'pnp-pick-btn', floating = true }) {
+    function filePicker(container, { accept, onFiles, browse, label = 'Pick from library', title, buttonClass = 'pnp-pick-btn', floating = true }) {
         const matches = acceptMatcher(accept);
         const filter = (it) => it.blob && matches(it.name, it.blob.type || typeFromName(it.name));
         return outputMenu(container, {
             label,
-            title: title || 'Use files loaded into or exported from PnPTools tools',
+            title: title || 'Use files from this project’s library',
             wrapClass: 'pnp-pick',
             buttonClass,
             floating,
@@ -1206,11 +1424,11 @@ ${content(([x, y]) => [x - m, y - m])}
         });
     }
 
-    // Top-bar "Inputs & outputs": browse any tool's recorded files in a viewer.
+    // Top-bar "Library": the project library, with a viewer for its files.
     function outputPreviewButton(container) {
         return outputMenu(container, {
-            label: 'Inputs & outputs',
-            title: 'Preview files loaded into and exported from PnPTools tools',
+            label: 'Library',
+            title: 'Files loaded into and made by the tools in this project',
             wrapClass: 'pnp-outputs',
             buttonClass: 'pnp-outputs-btn',
             footer: true,
@@ -1262,7 +1480,7 @@ ${content(([x, y]) => [x - m, y - m])}
         const dialog = h('div', { class: 'pnp-viewer', role: 'dialog', 'aria-modal': 'true', 'aria-label': `Output from ${toolLabel(set.from)}` },
             h('div', { class: 'pnp-viewer-head' },
                 h('div', { class: 'pnp-viewer-title' },
-                    h('strong', {}, `${describeSet({ items })} ${handoff.kindOf(set) === 'input' ? 'loaded in' : 'from'} ${toolLabel(set.from)}`),
+                    h('strong', {}, `${describeSet({ items })} ${set.kind === 'input' ? 'loaded in' : 'from'} ${toolLabel(set.from)}`),
                     h('span', {}, ` · ${timeAgo(set.created)}`)),
                 counter, download, close),
             h('div', { class: 'pnp-viewer-body' },
@@ -1327,7 +1545,7 @@ ${content(([x, y]) => [x - m, y - m])}
     // ---------------------------------------------------------------- dropzone
 
     // Files taken in are recorded as the tool's input (record: false to skip).
-    // The zone also gets a "Pick from Inputs & outputs" button (pick: false to skip).
+    // The zone also gets a "Pick from library" button (pick: false to skip).
     function dropzone(zone, { input, onFiles, accept, record = true, pick = true }) {
         const accepts = acceptMatcher(accept);
         const matches = (f) => accepts(f.name, f.type);
@@ -1367,53 +1585,147 @@ ${content(([x, y]) => [x - m, y - m])}
 
     // ---------------------------------------------------------------- project
 
-    // A .pnp project is a zip: manifest.json + files/<n>-<name>. The manifest
-    // holds the tool id, the project name, all settings (including
-    // data-persist="project" ones) and whatever extra state the tool registers.
+    // A project is the library plus every tool page's work and settings. The
+    // open project lives in the browser (see store) and each page saves its
+    // work into it as the user goes, so reloading or switching tools loses
+    // nothing. A .pnp file is the whole project: a zip of manifest.json
+    // ({ app, version: 2, name, settings: { key: values }, pages, library,
+    // blobs }) and files/<hash>. Older single-tool files (version 1: one
+    // tool's settings, state and files) still open on their tool's page.
     //
     // Where the browser has the File System Access API (Chrome, Edge), Save
     // writes back to the file the project was opened from or last saved to,
     // and Save as asks for a new file. Elsewhere both download a copy.
     const project = (() => {
-        const VERSION = 1;
+        const VERSION = 2;
         const TYPES = [{ description: 'PnPTools project', accept: { 'application/zip': ['.pnp'] } }];
-        let tool = null;
+        let tool = null;       // this page's tool id
+        let pageKey = null;    // this page's work in the project, e.g. "PnPCut/sheet.html"
         let hooks = null;
         let handle = null;     // FileSystemFileHandle saved to / opened from
         let nameInput = null;  // the top bar's project name field
+        let ready = Promise.resolve();
+        let lastSig = null;    // the work as last saved into the project
+        let active = 0;        // time of the user's last action on the page
 
         const canPick = () => typeof window.showSaveFilePicker === 'function';
         const name = () => (nameInput ? nameInput.value.trim() : '');
         function setName(value) {
             if (nameInput) nameInput.value = value || '';
         }
-        function defaultName() {
-            const stamp = new Date().toISOString().slice(0, 10);
-            return `${(hooks && hooks.fileName && hooks.fileName()) || tool}-${stamp}`;
-        }
+        const defaultName = () => `PnPTools-${new Date().toISOString().slice(0, 10)}`;
         const fileName = () => `${safeFileName(name().replace(/\.pnp$/i, '') || defaultName())}.pnp`;
 
         function register(h_) { hooks = h_; }
 
+        // Fields saved only with the work (data-persist="project").
+        function workFields() {
+            const all = settings.collect('project');
+            Object.keys(settings.collect('local')).forEach((k) => delete all[k]);
+            return all;
+        }
+
+        async function snapshot() {
+            const files = hooks.getFiles ? (await hooks.getFiles()) || [] : [];
+            const state = hooks.getState ? await hooks.getState() : null;
+            return { fields: workFields(), state: state === undefined ? null : state, files };
+        }
+
+        async function signature(snap) {
+            const files = [];
+            for (const f of snap.files) files.push([f.name, f.blob ? await store.hashOf(f.blob) : null, f.role || null]);
+            return JSON.stringify([snap.fields, snap.state, files]);
+        }
+
+        // Save this page's work into the project, if it changed.
+        let saving = null;
+        async function autosave() {
+            if (!hooks || !window.indexedDB) return;
+            if (saving) return saving;
+            saving = (async () => {
+                try {
+                    const snap = await snapshot();
+                    const sig = await signature(snap);
+                    if (sig === lastSig) return;
+                    await store.savePage(pageKey, snap);
+                    lastSig = sig;
+                } catch (err) {
+                    console.warn('Could not keep the work in this browser:', err);
+                }
+            })();
+            try { await saving; } finally { saving = null; }
+        }
+
+        // While the user is active (and a little after, for work that
+        // finishes later, like loading files), check every couple of seconds.
+        function watch() {
+            const mark = () => { active = Date.now(); };
+            ['input', 'change', 'drop', 'click', 'keydown', 'pointerup'].forEach((type) => document.addEventListener(type, mark, true));
+            setInterval(() => { if (Date.now() - active < 30000) autosave(); }, 2000);
+            document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') autosave(); });
+            window.addEventListener('pagehide', () => { autosave(); });
+        }
+
+        // Put a page's saved work ({ fields, state, files }) on this page.
+        async function applyPage(page, manifest = {}) {
+            settings.apply(page.fields);
+            if (hooks.setFiles) await hooks.setFiles(page.files, manifest);
+            if (hooks.setState) await hooks.setState(page.state, manifest);
+        }
+
+        // This page's work back from the project, when the page opens.
+        async function restore() {
+            if (!hooks || !window.indexedDB) return;
+            try {
+                const info = await store.getInfo();
+                if (!name()) setName(info.name); // unless the user is already typing one
+                const page = await store.loadPage(pageKey);
+                if (page) await applyPage(page);
+                // What's on the page now is what's saved: opening isn't a change.
+                lastSig = await signature(await snapshot());
+            } catch (err) {
+                console.warn('Could not restore the work:', err);
+            }
+        }
+
+        // Changed since the project was last saved to (or opened from) a file.
+        async function unsaved() {
+            try {
+                const info = await store.getInfo();
+                return info.changed > (info.saved || 0) && !(await store.isEmpty());
+            } catch (err) {
+                return false;
+            }
+        }
+
+        function allSettings() {
+            const out = {};
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    if (k.startsWith('pnp:settings:')) out[k.slice('pnp:settings:'.length)] = storageGet(k);
+                }
+            } catch (err) { /* storage blocked */ }
+            return out;
+        }
+
         async function build() {
-            const files = hooks.getFiles ? await hooks.getFiles() : [];
+            settings.flush();
+            await autosave();
+            await store.collect();
+            const { batches, pages, blobs } = await store.dump();
             const manifest = {
                 app: 'PnPTools',
                 version: VERSION,
-                tool,
                 name: name() || null,
                 saved: new Date().toISOString(),
-                settings: settings.collect('project'),
-                state: hooks.getState ? await hooks.getState() : null,
-                files: [],
+                settings: allSettings(),
+                pages,
+                library: batches,
+                blobs: [...blobs.keys()],
             };
-            const entries = [];
-            files.forEach((f, i) => {
-                const path = `files/${String(i + 1).padStart(4, '0')}-${safeFileName(f.name)}`;
-                manifest.files.push({ path, name: f.name, type: f.blob.type, role: f.role || null });
-                entries.push({ name: path, data: f.blob });
-            });
-            entries.unshift({ name: 'manifest.json', data: JSON.stringify(manifest, null, 2) });
+            const entries = [{ name: 'manifest.json', data: JSON.stringify(manifest, null, 2) }];
+            blobs.forEach((blob, hash) => entries.push({ name: `files/${hash}`, data: blob }));
             return zip.create(entries);
         }
 
@@ -1421,12 +1733,9 @@ ${content(([x, y]) => [x - m, y - m])}
         // Save never overwrites the file under its old name.
         async function save({ as = false } = {}) {
             if (!hooks) return;
-            // Clean from the moment the project is read: a change made while
-            // it is written still counts as unsaved.
-            const failed = (err) => { touchedSinceSave = true; throw err; };
+            const typed = name();
             if (!canPick()) {
-                markClean();
-                downloadBlob(await build().catch(failed), fileName(), { record: false });
+                downloadBlob(await build(), fileName(), { record: false });
             } else {
                 let target = handle;
                 if (as || !target || target.name !== fileName()) {
@@ -1438,16 +1747,15 @@ ${content(([x, y]) => [x - m, y - m])}
                         throw err;
                     }
                 }
-                markClean();
-                await (async () => {
-                    const blob = await build();
-                    const writable = await target.createWritable();
-                    await writable.write(blob);
-                    await writable.close();
-                })().catch(failed);
+                const blob = await build();
+                const writable = await target.createWritable();
+                await writable.write(blob);
+                await writable.close();
                 handle = target;
-                setName(baseName(target.name));
+                // The name follows the file, unless the user renamed it meanwhile.
+                if (name() === typed) setName(baseName(target.name));
             }
+            await store.setInfo({ name: name(), saved: Date.now() });
             hooks.markSaved && hooks.markSaved();
             toast(canPick() ? `Saved ${handle.name}.` : 'Project saved.', 'success');
         }
@@ -1458,22 +1766,46 @@ ${content(([x, y]) => [x - m, y - m])}
             if (!raw) throw new Error('This is not a PnPTools project file.');
             const manifest = JSON.parse(new TextDecoder().decode(raw));
             if (manifest.app !== 'PnPTools') throw new Error('This is not a PnPTools project file.');
-            if (manifest.tool !== tool) {
-                const other = TOOLS.find((t) => t.id === manifest.tool);
-                throw new Error(`This project belongs to ${other ? toolLabel(other.name) : manifest.tool}. Open it there.`);
+            const projectName = fileHandle || !manifest.name ? baseName(file.name) : manifest.name;
+            const now = Date.now();
+            if ((manifest.version || 1) >= 2) {
+                // Blobs are stored typeless; their refs know the type.
+                const types = new Map();
+                [...(manifest.library || []).flatMap((b) => b.items || []), ...(manifest.pages || []).flatMap((pg) => pg.files || [])]
+                    .forEach((r) => types.set(r.hash, r.type));
+                const blobs = new Map();
+                (manifest.blobs || []).forEach((hash) => {
+                    const data = entries.get(`files/${hash}`);
+                    if (data) blobs.set(hash, new Blob([data], { type: types.get(hash) || '' }));
+                });
+                await store.load({ batches: manifest.library || [], pages: manifest.pages || [], info: { name: projectName, changed: now, saved: now }, blobs });
+                Object.entries(manifest.settings || {}).forEach(([key, values]) => storageSet(`pnp:settings:${key}`, values));
+                settings.apply(settings.saved());
+                const page = await store.loadPage(pageKey);
+                await applyPage(page || { fields: {}, state: null, files: [] }, manifest);
+            } else {
+                // A single-tool project from before: it becomes this page's work.
+                if (manifest.tool !== tool) {
+                    const other = TOOLS.find((t) => t.id === manifest.tool);
+                    throw new Error(`This project belongs to ${other ? toolLabel(other.name) : manifest.tool}. Open it there.`);
+                }
+                const files = (manifest.files || []).map((f) => {
+                    const one = new File([entries.get(f.path)], f.name, { type: f.type || '' });
+                    if (f.role) one.pnpRole = f.role;
+                    return one;
+                });
+                await store.clearProject();
+                settings.apply(manifest.settings);
+                await applyPage({ fields: manifest.settings || {}, state: manifest.state, files }, manifest);
+                const items = files.map((f) => ({ name: f.name, blob: f, role: f.pnpRole || null }));
+                if (items.length) await store.addBatch({ kind: 'input', from: currentTool ? currentTool.name : tool, items });
+                await store.savePage(pageKey, await snapshot());
+                await store.setInfo({ name: projectName, changed: now, saved: now });
             }
-            const files = (manifest.files || []).map((f) => {
-                const file = new File([entries.get(f.path)], f.name, { type: f.type || '' });
-                if (f.role) file.pnpRole = f.role;
-                return file;
-            });
-            settings.apply(manifest.settings);
-            if (hooks.setFiles) await hooks.setFiles(files, manifest);
-            if (hooks.setState) await hooks.setState(manifest.state, manifest);
+            lastSig = await signature(await snapshot());
             handle = fileHandle;
             // The file's own name wins, so Save goes back to that file.
-            setName(fileHandle || !manifest.name ? baseName(file.name) : manifest.name);
-            markClean();
+            setName(projectName);
             toast('Project loaded.', 'success');
         }
 
@@ -1500,13 +1832,26 @@ ${content(([x, y]) => [x - m, y - m])}
             input.click();
         }
 
-        // Start over: the page reloads without its loaded files and work;
-        // settings stay (Reset restores those). Inputs & outputs is emptied.
+        // Start over: an empty project (library and every tool's work).
+        // Settings stay (Reset restores those).
         async function newProject() {
-            if (hasUnsaved() && !confirm('Discard the current work and start a new project?')) return;
-            try { await handoff.clear(); } catch (err) { /* IndexedDB unavailable */ }
+            if (settings.flush()) await store.touch(); // a change from the last moments counts too
+            await autosave();
+            if (await unsaved() && !confirm('Discard this project and start a new one?')) return;
+            try { await store.clearProject(); } catch (err) { /* IndexedDB unavailable */ }
             guardBypass = true;
             location.href = location.pathname;
+        }
+
+        function setup(toolId, key) {
+            tool = toolId;
+            pageKey = key;
+            if (!hooks) return;
+            watch();
+            ready = restore();
+            // Settings are part of the project too.
+            settings.onStore(() => { store.touch().catch(() => {}); });
+            if (nameInput) nameInput.addEventListener('change', () => store.setInfo({ name: name() }).catch(() => {}));
         }
 
         const report = (err) => { console.error(err); toast(`Could not save project: ${err.message}`, 'error'); };
@@ -1520,7 +1865,10 @@ ${content(([x, y]) => [x - m, y - m])}
             openPicker,
             name,
             setName,
+            autosave,
+            ready: () => ready,
             _nameInput: (el) => { nameInput = el; },
+            _setup: setup,
             _setTool: (t) => { tool = t; },
             get registered() { return !!hooks; },
         };
@@ -1578,9 +1926,9 @@ ${content(([x, y]) => [x - m, y - m])}
                     }, u))),
                 projectButtons ? [
                     projectNameField(),
-                    h('button', { type: 'button', class: 'pnp-action', onclick: () => project.newProject(), title: 'Start a new, empty project: clears the loaded files and Inputs & outputs (settings are kept)' }, 'New'),
+                    h('button', { type: 'button', class: 'pnp-action', onclick: () => project.newProject(), title: 'Start a new, empty project (settings are kept)' }, 'New'),
                     h('button', { type: 'button', class: 'pnp-action', onclick: () => project.openPicker(), title: 'Open a saved .pnp project' }, 'Open'),
-                    h('button', { type: 'button', class: 'pnp-action', onclick: () => project.save(), title: 'Save settings and loaded files as a .pnp project, named after the project (Ctrl/⌘ S)' }, 'Save'),
+                    h('button', { type: 'button', class: 'pnp-action', onclick: () => project.save(), title: 'Save the project (library, every tool’s work and settings) as a .pnp file (Ctrl/⌘ S)' }, 'Save'),
                     h('button', { type: 'button', class: 'pnp-action', onclick: () => project.saveAs(), title: 'Save the project to a new file (Ctrl/⌘ Shift S)' }, 'Save as'),
                 ] : null,
                 h('button', {
@@ -1623,6 +1971,18 @@ ${content(([x, y]) => [x - m, y - m])}
         });
     }
 
+    // Files from before the library (the Inputs & outputs sets) move into
+    // the library once.
+    async function migrateOldFiles() {
+        if (!window.indexedDB || storageGet('pnp:library-migrated', false)) return;
+        storageSet('pnp:library-migrated', true);
+        try {
+            const old = (await handoff.list()).filter((set) => set.kind === 'input' || set.kind === 'output').reverse();
+            for (const set of old) await store.addBatch({ kind: set.kind, from: set.from, items: set.items });
+            if (old.length) await handoff.clear();
+        } catch (err) { /* nothing to move */ }
+    }
+
     // ---------------------------------------------------------------- init
 
     /**
@@ -1639,6 +1999,8 @@ ${content(([x, y]) => [x - m, y - m])}
         const toolId = opts.tool;
         currentTool = TOOLS.find((t) => t.id === toolId) || null;
         project._setTool(toolId);
+        // Each page's work is kept under its path: "PnPCut/sheet.html".
+        const pageKey = `${toolId}/${location.pathname.split('/').pop() || 'index.html'}`;
         units.scan();
         units.relabel();
         topBar(toolId, { projectButtons: !!opts.project });
@@ -1648,6 +2010,8 @@ ${content(([x, y]) => [x - m, y - m])}
         }
         const rootEl = opts.settingsRoot === undefined ? document.querySelector('.sidebar') : opts.settingsRoot;
         settings.init(opts.settingsKey || toolId, rootEl);
+        project._setup(toolId, pageKey);
+        migrateOldFiles();
         if (opts.hasUnsavedWork) guard(opts.hasUnsavedWork);
         enableOffline(opts.offlineFiles || []);
     }

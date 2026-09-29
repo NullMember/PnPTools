@@ -115,7 +115,7 @@
     return b;
   }
 
-  // Picture button: browse for an image or take one from Inputs & outputs.
+  // Picture button: browse for an image or take one from the library.
   function imagePicker(card, title) {
     const icon = document.createElement('span');
     icon.className = 'card-action-icon';

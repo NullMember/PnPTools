@@ -37,7 +37,7 @@ test('card editor .pnp project keeps cards, images and shapes', async ({ page })
   await expect(page.locator('#canvasSvg .shape-el')).toHaveCount(2);
 
   const saved = await download(page, () => topBar(page).getByRole('button', { name: 'Save', exact: true }).click());
-  expect(saved.name).toMatch(/^PnPCut-cards-.*\.pnp$/);
+  expect(saved.name).toMatch(/^PnPTools-.*\.pnp$/);
 
   await page.goto('PnPCut/editor.html');
   await page.fill('#cardW__display', '63');
@@ -231,8 +231,12 @@ test('Save names the project file after the project name, and Open restores it',
   const copy = await download(page, () => topBar(page).getByRole('button', { name: 'Save as', exact: true }).click());
   expect(copy.name).toBe('Dragon deck.pnp');
 
-  await page.goto('PnPTuckBox/index.html');
-  await expect(page.locator('.pnp-project-name')).toHaveValue('');
+  // The name belongs to the project, which the browser keeps.
+  await page.goto('PnPBleed/index.html');
+  await expect(page.locator('.pnp-project-name')).toHaveValue('Dragon deck');
+
+  await page.fill('.pnp-project-name', 'Something else');
+  await page.press('.pnp-project-name', 'Tab');
   await page.evaluate(async (bytes) => {
     await PnP.project.load(new File([new Uint8Array(bytes)], 'Dragon deck (1).pnp'));
   }, [...require('node:fs').readFileSync(saved.path)]);
@@ -268,7 +272,7 @@ test.describe('with the File System Access API', () => {
     await save(page);
     await expect.poll(() => page.evaluate(async () => {
       const entries = await PnP.zip.read(window.__fs['Box.pnp']);
-      return JSON.parse(new TextDecoder().decode(entries.get('manifest.json'))).settings.cardCount;
+      return (JSON.parse(new TextDecoder().decode(entries.get('manifest.json'))).settings.PnPTuckBox || {}).cardCount;
     })).toBe('20');
     expect((await state(page)).calls).toBe(1); // no second dialog
   });
@@ -287,6 +291,7 @@ test.describe('with the File System Access API', () => {
   test('renaming the project asks where to save it', async ({ page }) => {
     await page.fill('.pnp-project-name', 'Box');
     await save(page);
+    await expect(page.locator('.pnp-toast')).toContainText('Saved Box.pnp');
     await page.fill('.pnp-project-name', 'Renamed');
     await save(page);
     await expect.poll(() => state(page)).toEqual({ calls: 2, files: ['Box.pnp', 'Renamed.pnp'] });
@@ -295,6 +300,7 @@ test.describe('with the File System Access API', () => {
   test('a project opened from a file saves back to it', async ({ page }) => {
     await page.fill('.pnp-project-name', 'Mine');
     await save(page);
+    await expect(page.locator('.pnp-toast')).toContainText('Saved Mine.pnp');
     const bytes = await page.evaluate(async () => [...new Uint8Array(await window.__fs['Mine.pnp'].arrayBuffer())]);
     await page.goto('PnPTuckBox/index.html'); // later, in a fresh page
     await page.evaluate((b) => { window.__openFile = new File([new Uint8Array(b)], 'Mine.pnp'); }, bytes);
@@ -345,41 +351,31 @@ test.describe('unsaved-work warning after Save', () => {
     expect(await newAsks(page)).toBe(false);
   });
 
-  test('leaving right after a Save does not warn', async ({ page }) => {
+  test('leaving never warns: the work stays in the browser', async ({ page }) => {
     await page.goto('PnPBleed/index.html');
     const img = await makeCardImages(page);
     await page.setInputFiles('#imageInput', [img.alpha]);
-    const warns = () => page.evaluate(() => {
+    const warns = await page.evaluate(() => {
       const e = new Event('beforeunload', { cancelable: true });
       window.dispatchEvent(e);
       return e.defaultPrevented;
     });
-    expect(await warns()).toBe(true);
-    await download(page, () => topBar(page).getByRole('button', { name: 'Save', exact: true }).click());
-    expect(await warns()).toBe(false);
+    expect(warns).toBe(false);
   });
 });
 
-// ---- storage limit ----
+// ---- the library ----
 
-test('Inputs & outputs stays under its size limit, dropping the oldest sets', async ({ page }) => {
+test('the library shows the space used, and Clear all empties it', async ({ page }) => {
   await page.goto('PnPBleed/index.html');
-  const left = await page.evaluate(async () => {
-    const mb = (n) => new Blob([new Uint8Array(n * 1024 * 1024)], { type: 'image/png' });
-    const ids = [];
-    for (let i = 0; i < 4; i++) { // 4 × 150 MB > 500 MB
-      ids.push(await PnP.recordFiles({ kind: i % 2 ? 'input' : 'output', items: [{ name: `big${i}.png`, blob: mb(150) }] }));
-      await new Promise((r) => setTimeout(r, 5)); // distinct timestamps
-    }
-    const sets = await PnP.handoff.list();
-    return { names: sets.map((s) => s.items[0].name), newest: sets[0].id === ids[3] };
+  await page.evaluate(async () => {
+    const mb = (n) => new Blob([new Uint8Array(n * 1024 * 1024).fill(n)], { type: 'image/png' });
+    await PnP.recordFiles({ kind: 'input', items: [{ name: 'big.png', blob: mb(3) }] });
+    await PnP.recordFiles({ kind: 'output', items: [{ name: 'big-copy.png', blob: mb(3) }, { name: 'small.png', blob: mb(1) }] });
   });
-  expect(left.names).toEqual(['big3.png', 'big2.png', 'big1.png']);
-  expect(left.newest).toBe(true);
-
   await openFiles(page);
-  await expect(popover(page).locator('.pnp-popover-footer')).toContainText('450.0 MB of 500.0 MB used');
-  await expect(popover(page).locator('.pnp-popover-row').first()).toContainText('150.0 MB');
+  await expect(popover(page).locator('.pnp-popover-footer')).toContainText('4.0 MB in this project'); // big.png is stored once
+  await expect(popover(page).locator('.pnp-popover-row[data-kind="output"]')).toContainText('4.0 MB');
   await popover(page).getByRole('button', { name: 'Clear all' }).click();
   await expect(popover(page).locator('.pnp-popover-row')).toHaveCount(0);
   await expect(popover(page).locator('.pnp-popover-empty')).toBeVisible();

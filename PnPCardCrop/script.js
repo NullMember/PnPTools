@@ -768,7 +768,7 @@ cropForm.addEventListener('submit', async (event) => {
     lastCrop.front.sort(byName);
     lastCrop.back.sort(byName);
     sendMenu.setEnabled(lastCrop.front.length + lastCrop.back.length > 0);
-    PnP.recordFiles({ items: croppedItems() }); // shows up under Inputs & outputs
+    PnP.recordFiles({ items: croppedItems() }); // goes into the library
 
     // Generate and download zip files
     if (isDuplex || isDuplexShort || isFoldVertical || isFoldHorizontal || isBackLast) {
