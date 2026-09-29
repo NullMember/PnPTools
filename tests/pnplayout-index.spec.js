@@ -276,6 +276,8 @@ test.describe('fold mode', () => {
       const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Add backs…' }).click()]);
       await chooser.setFiles(await card(page, 300, { name: 'Back.png', color: '#cc3333' }));
       await expect(rows(page).locator('.piece-face.back img')).toHaveCount(1);
+      // The status can still show the layout from before the back: wait for the repack.
+      await expect.poll(() => page.evaluate(() => (state.layout && state.layout.fold ? state.layout.fold.backs[0].length : 0))).toBeGreaterThan(0);
     }
   };
   const layout = (page) => page.evaluate(() => ({ sheets: state.layout.sheets, fold: state.layout.fold, grid: state.layout.grid }));
@@ -420,4 +422,21 @@ test('zoom resizes the sheet previews', async ({ page }) => {
   expect(await width()).toBeCloseTo(before * 2, 0);
   const fits = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
   expect(fits).toBe(true); // the sheets scroll, not the page
+});
+
+test('pieces sit side by side in one row that scrolls sideways', async ({ page }) => {
+  const files = [];
+  for (let i = 0; i < 10; i++) files.push(await card(page, 300, { name: `Card${i}.png` }));
+  await page.setInputFiles('#imageInput', files);
+  await expect(rows(page)).toHaveCount(10);
+  const layout = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('#pieceList .piece')].map((el) => el.getBoundingClientRect());
+    const strip = document.querySelector('.piece-strip');
+    return {
+      oneRow: cards.every((r) => Math.abs(r.top - cards[0].top) < 1),
+      scrolls: strip.scrollWidth > strip.clientWidth,
+      pageFits: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    };
+  });
+  expect(layout).toEqual({ oneRow: true, scrolls: true, pageFits: true });
 });
