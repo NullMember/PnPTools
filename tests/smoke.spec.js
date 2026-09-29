@@ -53,3 +53,22 @@ for (const path of PAGES) {
     }
   });
 }
+
+// Phone width: nothing scrolls sideways, and the top bar fits the screen.
+test.describe('at phone width', () => {
+  test.use({ viewport: { width: 390, height: 800 } });
+  for (const path of PAGES) {
+    test(`${path} fits a phone screen`, async ({ page }) => {
+      await page.goto(path);
+      const fit = await page.evaluate(() => {
+        const width = document.documentElement.clientWidth;
+        const bar = document.querySelector('.pnp-topbar');
+        return {
+          page: document.documentElement.scrollWidth <= width,
+          bar: !bar || [...bar.querySelectorAll('*')].every((el) => el.getBoundingClientRect().right <= width + 1),
+        };
+      });
+      expect(fit).toEqual({ page: true, bar: true });
+    });
+  }
+});
