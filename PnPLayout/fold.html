@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PnP Layout: Fold</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/tool.css">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="shared/icon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#1a1d27">
+    <script src="shared/pnp-theme.js"></script>
+    <link rel="stylesheet" href="shared/pnp-shared.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+</head>
+<body data-mode="fold">
+    <div class="container">
+        <header>
+            <h1>Fold Cards</h1>
+            <p class="subtitle">Fronts and backs on one page: print one-sided, fold, glue and cut.</p>
+            <nav class="tool-nav">
+                <a class="nav-link" href="index.html">Pack &rarr;</a>
+                <a class="nav-link" href="grid.html">Card grid &rarr;</a>
+                <a class="nav-link current" href="fold.html">Fold</a>
+            </nav>
+        </header>
+
+        <div class="content">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="panel">
+                    <div class="panel-title">Cards <span class="help" tabindex="0" data-tip="One image per card. Add backs in the card list.">?</span></div>
+                    <div class="dropzone" id="dropZone">
+                        <div class="dz-title">Drag &amp; drop card images here</div>
+                        <input type="file" id="imageInput" multiple accept="image/png,image/jpeg,image/webp" hidden>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Paper <span class="help" tabindex="0" data-tip="Pieces stay inside the margins.">?</span></div>
+                    <div class="control-group">
+                        <label for="paperSize">Preset</label>
+                        <select id="paperSize"></select>
+                    </div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="paperW">Width (mm)</label>
+                            <input type="number" id="paperW" value="210" min="50" step="0.1" data-unit="mm">
+                        </div>
+                        <div class="control-group">
+                            <label for="paperH">Height (mm)</label>
+                            <input type="number" id="paperH" value="297" min="50" step="0.1" data-unit="mm">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="marginTop">Top margin (mm)</label>
+                            <input type="number" id="marginTop" value="7" min="0" step="0.5" data-unit="mm">
+                        </div>
+                        <div class="control-group">
+                            <label for="marginBottom">Bottom margin (mm)</label>
+                            <input type="number" id="marginBottom" value="7" min="0" step="0.5" data-unit="mm">
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="marginLeft">Left margin (mm)</label>
+                            <input type="number" id="marginLeft" value="7" min="0" step="0.5" data-unit="mm">
+                        </div>
+                        <div class="control-group">
+                            <label for="marginRight">Right margin (mm)</label>
+                            <input type="number" id="marginRight" value="7" min="0" step="0.5" data-unit="mm">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Fold <span class="help" tabindex="0" data-tip="Fold margin: space between the cards and the fold.">?</span></div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="foldDirection">Fold</label>
+                            <select id="foldDirection">
+                                <option value="auto">Auto (fits more)</option>
+                                <option value="vertical">Vertical</option>
+                                <option value="horizontal">Horizontal</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label for="foldGap">Fold margin (mm)</label>
+                            <input type="number" id="foldGap" value="2" min="0" max="30" step="0.5" data-unit="mm">
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="gridSizeMode">Grid size</label>
+                        <select id="gridSizeMode">
+                            <option value="auto">Auto: as many as fit</option>
+                            <option value="manual">Rows and columns</option>
+                        </select>
+                    </div>
+                    <div class="row" id="gridCountGroup">
+                        <div class="control-group">
+                            <label for="gridCols">Columns</label>
+                            <input type="number" id="gridCols" value="3" min="1" max="30" step="1">
+                        </div>
+                        <div class="control-group">
+                            <label for="gridRows">Rows</label>
+                            <input type="number" id="gridRows" value="3" min="1" max="30" step="1">
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="spacing">Gap between cards (mm)</label>
+                        <input type="number" id="spacing" value="2" min="0" step="0.5" data-unit="mm">
+                    </div>
+                    <div class="control-group">
+                        <label class="inline"><input type="checkbox" id="cropMarks" checked> Crop marks</label>
+                    </div>
+                    <div class="control-group">
+                        <label for="defaultDpi">DPI for images without DPI info</label>
+                        <input type="number" id="defaultDpi" value="300" min="30" max="2400" step="1">
+                        <div class="input-hint">Sets the starting size of new cards.</div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Cutting <span class="help" tabindex="0" data-tip="Bleed in images: for images with bleed that weren't made by Bleed tool.">?</span></div>
+                    <div class="control-group" id="bleedTool">
+                        <div class="input-hint">Add bleed to your cards with Bleed tool.</div>
+                        <div id="sendSlot"></div>
+                    </div>
+                    <div class="control-group">
+                        <label for="imageBleed">Bleed in images (mm)</label>
+                        <input type="number" id="imageBleed" value="0" min="0" max="10" step="0.25" data-unit="mm">
+                        <div class="input-hint">Images from Bleed tool are detected automatically.</div>
+                    </div>
+                    <div class="control-group">
+                        <label class="inline"><input type="checkbox" id="cutOutline" checked> Print cut outline</label>
+                    </div>
+                    <div class="control-group">
+                        <label for="cornerRadius">Corner radius (mm)</label>
+                        <input type="number" id="cornerRadius" value="0" min="0" max="20" step="0.5" data-unit="mm" list="cornerRadiusPresets">
+                        <datalist id="cornerRadiusPresets">
+                            <option value="0"></option>
+                            <option value="3"></option>
+                            <option value="5"></option>
+                            <option value="8"></option>
+                        </datalist>
+                        <div class="input-hint">Playing cards are usually 3 mm.</div>
+                    </div>
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="cutWidth">Line width (pt)</label>
+                            <input type="number" id="cutWidth" value="0.5" min="0.1" max="5" step="0.1">
+                        </div>
+                        <div class="control-group">
+                            <label for="cutColor">Line colour</label>
+                            <input type="color" id="cutColor" value="#9a9a9a">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel" id="machinePanel">
+                    <div class="panel-title">Cutting Machine <span class="help" tabindex="0" data-tip="The mat edge your machine can't cut (Cricut: 6.35 mm).">?</span></div>
+                    <div class="control-group">
+                        <label for="machinePreset">Machine</label>
+                        <select id="machinePreset"></select>
+                    </div>
+                    <div class="control-group">
+                        <label for="machineMargin">Mat dead margin (mm)</label>
+                        <input type="number" id="machineMargin" value="6.35" min="0" step="0.01" data-unit="mm">
+                        <div class="input-hint">Keep the paper margins at least this wide.</div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Export</div>
+                    <div class="button-group">
+                        <button class="btn-primary" id="downloadPdf" disabled>Download PDF</button>
+                        <button class="btn-secondary" id="downloadSvg" disabled>Download SVG cut file</button>
+                    </div>
+                    <div class="input-hint">The SVG cut file matches the PDF.</div>
+                </div>
+            </div>
+
+            <!-- Main content -->
+            <div class="main">
+                <div class="preview-section">
+                    <div class="preview-title">Cards <span id="pieceCount" class="input-hint"></span></div>
+                    <div class="piece-list" id="pieceList">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🧩</div>
+                            <div>Add card images and their backs to start.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="status info" id="status">Add cards to get started</div>
+
+                <div class="preview-section">
+                    <div class="sheet-toolbar">
+                        <div class="preview-title">Sheets</div>
+                        <div class="sheet-controls">
+                            <label class="sheet-zoom">Zoom <input type="range" id="sheetZoom" min="50" max="300" step="25" value="100" aria-label="Zoom the sheets"> <output id="sheetZoomValue">100%</output></label>
+                            <div class="segmented" id="sideToggle" role="group" aria-label="Side to preview">
+                                <button type="button" data-side="front" aria-pressed="true">Front</button>
+                                <button type="button" data-side="back" aria-pressed="false">Back</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sheet-grid" id="sheetGrid"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="shared/pnp-shared.js"></script>
+    <script src="js/packer.js"></script>
+    <script src="js/pieces.js"></script>
+    <script src="js/render.js"></script>
+    <script src="js/grid.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

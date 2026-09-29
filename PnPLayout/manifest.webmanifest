@@ -1,0 +1,15 @@
+{
+  "name": "PnP Layout",
+  "short_name": "Layout",
+  "description": "Pack mixed-shape pieces tightly onto printable sheets.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f1117",
+  "theme_color": "#1a1d27",
+  "icons": [
+    { "src": "shared/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "shared/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "shared/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
