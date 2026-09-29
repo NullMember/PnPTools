@@ -1,0 +1,49 @@
+/* PnPBleed-only styles. The shared base lives in style.css (synced from the hub). */
+
+/* ---- PnPBleed: trim line toggle -------------------------------------------- */
+
+.trim-toggle {
+    margin-left: 8px;
+    font-weight: 400;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.control-group[hidden] {
+    display: none;
+}
+
+/* Remove button on each card thumbnail, shown on hover or focus */
+.thumbnail-remove {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border-radius: 50%;
+    border: none;
+    font-size: 0.7rem;
+    line-height: 22px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    cursor: pointer;
+}
+
+.thumbnail:hover .thumbnail-remove,
+.thumbnail-remove:focus-visible {
+    opacity: 1;
+}
+
+.thumbnail-remove:hover {
+    background: var(--danger, #e03131);
+}
+
+@media (hover: none) {
+    .thumbnail-remove {
+        opacity: 1;
+    }
+}

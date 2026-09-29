@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Bleed Generator</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/tool.css">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="shared/icon.svg" type="image/svg+xml">
+    <meta name="theme-color" content="#1a1d27">
+    <script src="shared/pnp-theme.js"></script>
+    <link rel="stylesheet" href="shared/pnp-shared.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Card Bleed Generator</h1>
+            <p class="subtitle">Add bleed to cards and shapes, so a slightly-off cut shows no white edge.</p>
+        </header>
+
+        <div class="content">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="panel">
+                    <div class="panel-title">Upload</div>
+                    <div class="dropzone" id="dropZone">
+                        <div class="dz-title">Drag &amp; drop card images here</div>
+                        <div>or click to browse</div>
+                        <input type="file" id="imageInput" multiple accept="image/*" hidden>
+                    </div>
+                    <div class="input-hint">One image per card, at its finished size.</div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Card Dimensions <span class="help" tabindex="0" data-tip="The finished card size, without bleed.">?</span></div>
+                    <div class="control-group">
+                        <label for="cardPreset">Preset</label>
+                        <select id="cardPreset"></select>
+                    </div>
+
+                    <div class="row">
+                        <div class="control-group">
+                            <label for="cardWidthInput">Width (mm)</label>
+                            <input type="number" id="cardWidthInput" value="63" min="1" max="200" step="0.1" data-unit="mm">
+                        </div>
+
+                        <div class="control-group">
+                            <label for="cardHeightInput">Height (mm)</label>
+                            <input type="number" id="cardHeightInput" value="88" min="1" max="200" step="0.1" data-unit="mm">
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="bleedInput">Bleed (mm)</label>
+                        <input type="number" id="bleedInput" value="2" min="0.1" max="50" step="0.1" data-unit="mm">
+                    </div>
+
+                    <div class="control-group">
+                        <label for="bleedMode">Bleed style</label>
+                        <select id="bleedMode">
+                            <option value="extend">Extend edge pixels</option>
+                            <option value="mirror">Mirror the artwork</option>
+                            <option value="solid">Solid colour</option>
+                            <option value="shape">Follow the shape (transparent images)</option>
+                        </select>
+                        <div class="input-hint" id="bleedModeHint">Best for flat borders and frames.</div>
+                    </div>
+
+                    <div class="control-group" id="bleedColorGroup" hidden>
+                        <label for="bleedColor">Bleed colour</label>
+                        <input type="color" id="bleedColor" value="#000000">
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Corner Removal <span class="help" tabindex="0" data-tip="Removes printed rounded corners before adding bleed.">?</span></div>
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="removeWhiteCornersInput">
+                            Remove corners
+                        </label>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="cornerSizeInput">Corner size (mm)</label>
+                        <input type="number" id="cornerSizeInput" value="2.5" min="0.1" max="10" step="0.1" disabled data-unit="mm">
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Edge Removal <span class="help" tabindex="0" data-tip="Cuts a border off the sides. The bleed covers what was removed.">?</span></div>
+                    <button type="button" class="btn-secondary btn-small" id="detectBorderBtn" disabled>Detect white border</button>
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="removeLeftSideInput">
+                            Left edge (mm)
+                        </label>
+                        <input type="number" id="leftSideWidthInput" value="0" min="0" max="10" step="0.1" disabled data-unit="mm">
+                    </div>
+
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="removeRightSideInput">
+                            Right edge (mm)
+                        </label>
+                        <input type="number" id="rightSideWidthInput" value="0" min="0" max="10" step="0.1" disabled data-unit="mm">
+                    </div>
+
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="removeTopSideInput">
+                            Top edge (mm)
+                        </label>
+                        <input type="number" id="topSideHeightInput" value="0" min="0" max="10" step="0.1" disabled data-unit="mm">
+                    </div>
+
+                    <div class="control-group">
+                        <label>
+                            <input type="checkbox" id="removeBottomSideInput">
+                            Bottom edge (mm)
+                        </label>
+                        <input type="number" id="bottomSideHeightInput" value="0" min="0" max="10" step="0.1" disabled data-unit="mm">
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-title">Export</div>
+                    <div class="button-group">
+                        <button class="btn-secondary" id="downloadBtn" disabled>Download Current Card</button>
+                        <button class="btn-secondary" id="downloadAllBtn" disabled>Download All Cards</button>
+                    </div>
+                    <div id="sendSlot"></div>
+
+                    <div class="status info" id="status">
+                        👋 Upload images to get started
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main content -->
+            <div class="main">
+                <div class="preview-section">
+                    <div class="preview-title">Uploaded Cards</div>
+                    <div class="thumbnails-container" id="thumbnailsContainer">
+                        <div class="empty-state" style="width: 100%; justify-content: center;">
+                            <div class="empty-state-icon">📁</div>
+                            <div>No images uploaded yet</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="preview-section">
+                    <div class="preview-title">Comparison</div>
+                    <div class="comparison-container" id="comparisonContainer">
+                        <div class="comparison-item">
+                            <div class="comparison-label">Original</div>
+                            <div class="canvas-container" id="originalContainer">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">📋</div>
+                                    <div>Select a card</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="comparison-item">
+                            <div class="comparison-label">With Bleed <label class="inline trim-toggle"><input type="checkbox" id="showTrimLine" checked> trim line</label></div>
+                            <div class="canvas-container" id="processedContainer">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">✨</div>
+                                    <div>Processing...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="info-grid" id="infoGrid" style="display: none;">
+                        <div class="info-item">
+                            <span class="info-label">Original Size</span>
+                            <span class="info-value" id="originalSize">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Bleed Size</span>
+                            <span class="info-value" id="bleedSize">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Original (px)</span>
+                            <span class="info-value" id="originalPixels">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">With Bleed (px)</span>
+                            <span class="info-value" id="bleedPixels">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="shared/pnp-shared.js"></script>
+    <script src="js/edge.js"></script>
+    <script src="js/sides.js"></script>
+    <script src="js/bleed.js"></script>
+    <script src="js/shape.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
