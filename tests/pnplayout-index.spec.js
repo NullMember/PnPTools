@@ -201,3 +201,42 @@ test.describe('images that already include bleed', () => {
     expect(grid.gap).toBeCloseTo(3, 5); // bleed of one card may reach the next card's cut, no further
   });
 });
+
+test.describe('adding backs', () => {
+  const addBacks = async (page, files) => {
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Add backs…' }).click()]);
+    await chooser.setFiles(files);
+  };
+  const backsOf = (page) => page.evaluate(() => [...state.pieces.values()].map((p) => (p.back ? p.back.file.name : null)));
+
+  test('backs are matched to fronts by name', async ({ page }) => {
+    await page.setInputFiles('#imageInput', [
+      await card(page, 300, { name: 'Ace_front.png' }),
+      await card(page, 300, { name: 'Game_front_0002.png' }),
+      await card(page, 300, { name: 'King.png' }),
+    ]);
+    await expect(rows(page)).toHaveCount(3);
+    await addBacks(page, [
+      await card(page, 300, { name: 'Game_back_0002.png' }),
+      await card(page, 300, { name: 'Ace back.png' }),
+    ]);
+    await expect(page.locator('.pnp-toast').last()).toContainText('2 of 3 pieces got a back');
+    expect(await backsOf(page)).toEqual(['Ace back.png', 'Game_back_0002.png', null]);
+  });
+
+  test('without matching names, backs go on in order when the counts agree', async ({ page }) => {
+    await page.setInputFiles('#imageInput', [await card(page, 300, { name: 'a.png' }), await card(page, 300, { name: 'b.png' })]);
+    await expect(rows(page)).toHaveCount(2);
+    await addBacks(page, [await card(page, 300, { name: 'x.png' }), await card(page, 300, { name: 'y.png' })]);
+    await expect(page.locator('.pnp-toast').last()).toContainText('Every piece has a back');
+    expect(await backsOf(page)).toEqual(['x.png', 'y.png']);
+  });
+
+  test('backs that match nothing are reported', async ({ page }) => {
+    await page.setInputFiles('#imageInput', [await card(page, 300, { name: 'a.png' }), await card(page, 300, { name: 'b.png' })]);
+    await expect(rows(page)).toHaveCount(2);
+    await addBacks(page, [await card(page, 300, { name: 'x.png' }), await card(page, 300, { name: 'y.png' }), await card(page, 300, { name: 'z.png' })]);
+    await expect(page.locator('.pnp-toast').last()).toContainText("Couldn't match 3 backs to 2 pieces");
+    expect(await backsOf(page)).toEqual([null, null]);
+  });
+});
