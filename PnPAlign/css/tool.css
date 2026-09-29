@@ -1,0 +1,145 @@
+/* PnPAlign-only styles. The shared base lives in style.css (synced from the hub). */
+
+/* ==========================================================================
+   PnPAlign-only additions
+   Small set of additive rules for pieces that have no equivalent in the
+   shared vocabulary above. Kept minimal and visually consistent with the
+   dark theme (accent blue, same border/radius language).
+   ========================================================================== */
+
+/* Reference/Before/After/Guide preview strip: a 3-up (and 1-up for the guide
+   row) variant of .comparison-container, which only ships a fixed 2-column
+   layout. Everything else (.comparison-item, .comparison-label,
+   .preview-canvas-container's checkerboard canvas background) is reused as-is. */
+.comparison-container.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.comparison-container.cols-1 { grid-template-columns: 1fr; }
+
+/* Crop offset (top/left/right/bottom) 3x3 grid — no equivalent numeric-grid
+   component in the shared vocabulary. */
+.crop-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.crop-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.crop-field label {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+/* Card gallery thumbnails (rendered dynamically by js/app.js renderGallery()).
+   The shared .thumbnail component is a bare square image tile; PnPAlign's
+   cards additionally need a name caption plus reference-star/remove-x corner
+   buttons, so it's extended here rather than reused directly. Classes
+   card-thumb/selected/reference/ref-star/remove-x/thumb-name are all applied
+   by JS at runtime — do not rename them. */
+.card-thumb {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface2);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.card-thumb:hover {
+    border-color: var(--accent);
+}
+
+.card-thumb.selected {
+    border-color: var(--accent);
+}
+
+.card-thumb.reference {
+    border-color: var(--warning);
+}
+
+.card-thumb img {
+    width: 100%;
+    height: 90px;
+    object-fit: contain;
+    background: var(--surface2);
+    border-radius: 4px;
+}
+
+.card-thumb .thumb-name {
+    width: 100%;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.card-thumb .ref-star,
+.card-thumb .remove-x {
+    position: absolute;
+    top: 4px;
+    width: 20px;
+    height: 20px;
+    line-height: 18px;
+    text-align: center;
+    font-size: 12px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    color: var(--text);
+}
+
+.card-thumb .ref-star {
+    left: 4px;
+    color: var(--warning);
+}
+
+.card-thumb .remove-x {
+    right: 4px;
+    color: var(--danger);
+}
+
+.card-thumb.reference .ref-star {
+    background: var(--warning);
+    color: #111111;
+    border-color: transparent;
+}
+
+/* ---- PnPAlign: batch progress ------------------------------------------------ */
+
+.progress {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+.progress[hidden] {
+    display: none;
+}
+
+.progress-track {
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--surface2);
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    transition: width 0.15s;
+}

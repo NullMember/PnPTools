@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PnPScan — Card Color &amp; Rotation Aligner</title>
+<link rel="stylesheet" href="css/style.css" />
+<link rel="stylesheet" href="css/tool.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="shared/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#1a1d27">
+<script src="shared/pnp-theme.js"></script>
+<link rel="stylesheet" href="shared/pnp-shared.css" />
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>PnPScan Card Aligner</h1>
+  <p class="subtitle">Match the colour, rotation, size and position of scanned cards.</p>
+</header>
+
+<div class="content with-gallery">
+  <aside class="sidebar">
+
+    <section class="panel">
+      <h3 class="panel-title">1. Load Cards <span class="help" tabindex="0" data-tip="Click ★ on a card to make it the reference the others are matched to.">?</span></h3>
+      <div id="dropzone" class="dropzone">
+        <div class="dz-title">Drag &amp; drop card images here</div>
+        <div>or click to browse</div>
+        <input type="file" id="fileInput" accept="image/*" multiple hidden />
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3 class="panel-title">2. Color Alignment <span class="help" tabindex="0" data-tip="Run Auto Color Align first; then the switches below turn each part on or off.">?</span></h3>
+      <button id="autoColorBtn" class="btn-primary" disabled>Auto Color Align to Reference</button>
+      <div class="control-group">
+        <label class="inline"><input type="checkbox" id="colorEnabled" data-persist="project" checked disabled /> Apply color edits</label>
+      </div>
+      <div class="control-group">
+        <label class="inline"><input type="checkbox" id="autoColorEnabled" data-persist="project" checked disabled /> Include auto alignment</label>
+      </div>
+      <h4>Manual batch adjustment</h4>
+      <div class="slider-field">
+        <label for="brightness">Brightness</label>
+        <input type="range" id="brightness" data-persist="project" min="-100" max="100" value="0" />
+        <output id="brightnessOut">0</output>
+      </div>
+      <div class="slider-field">
+        <label for="contrast">Contrast</label>
+        <input type="range" id="contrast" data-persist="project" min="-100" max="100" value="0" />
+        <output id="contrastOut">0</output>
+      </div>
+      <div class="slider-field">
+        <label for="saturation">Saturation</label>
+        <input type="range" id="saturation" data-persist="project" min="-100" max="100" value="0" />
+        <output id="saturationOut">0</output>
+      </div>
+      <div class="slider-field">
+        <label for="rGain">Red gain</label>
+        <input type="range" id="rGain" data-persist="project" min="0.5" max="1.5" step="0.01" value="1" />
+        <output id="rGainOut">1.00</output>
+      </div>
+      <div class="slider-field">
+        <label for="gGain">Green gain</label>
+        <input type="range" id="gGain" data-persist="project" min="0.5" max="1.5" step="0.01" value="1" />
+        <output id="gGainOut">1.00</output>
+      </div>
+      <div class="slider-field">
+        <label for="bGain">Blue gain</label>
+        <input type="range" id="bGain" data-persist="project" min="0.5" max="1.5" step="0.01" value="1" />
+        <output id="bGainOut">1.00</output>
+      </div>
+      <button id="resetColorBtn" class="btn-secondary btn-small">Reset Manual Color</button>
+    </section>
+
+    <section class="panel">
+      <h3 class="panel-title">3. Rotation Alignment <span class="help" tabindex="0" data-tip="Run Auto Detect first; then the switches below turn each part on or off.">?</span></h3>
+      <button id="autoRotateBtn" class="btn-primary" disabled>Auto Detect &amp; Level Rotation</button>
+      <div class="control-group">
+        <label class="inline"><input type="checkbox" id="rotationEnabled" data-persist="project" checked disabled /> Apply rotation edits</label>
+      </div>
+      <div class="control-group">
+        <label class="inline"><input type="checkbox" id="autoAngleEnabled" data-persist="project" checked disabled /> Include auto leveling</label>
+      </div>
+      <div class="slider-field">
+        <label for="manualRotation">Batch rotation offset (°)</label>
+        <input type="range" id="manualRotation" data-persist="project" min="-10" max="10" step="0.1" value="0" />
+        <output id="manualRotationOut">0.0</output>
+      </div>
+      <div class="control-group">
+        <label for="perCardRotation">Fine-tune selected card (°)</label>
+        <input type="number" id="perCardRotation" data-persist="false" step="0.1" value="0" style="width:5em" />
+      </div>
+      <button id="resetRotationBtn" class="btn-secondary btn-small">Reset Manual Rotation</button>
+    </section>
+
+    <section class="panel">
+      <h3 class="panel-title">4. Scale Alignment <span class="help" tabindex="0" data-tip="Resizes each card to match the reference, e.g. for scans at a different zoom.">?</span></h3>
+      <button id="autoScaleBtn" class="btn-primary" disabled>Auto Detect &amp; Match Scale</button>
+      <div class="control-group">
+        <label class="inline"><input type="checkbox" id="autoScaleEnabled" data-persist="project" checked disabled /> Apply auto scale match</label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3 class="panel-title">5. Position Alignment <span class="help" tabindex="0" data-tip="Shifts each card to line up with the reference. Best after rotation and scale.">?</span></h3>
+      <button id="autoPositionBtn" class="btn-primary" disabled>Auto Detect &amp; Match Position</button>
+      <div class="control-group">
+        <label class="inline"><input type="checkbox" id="autoPositionEnabled" data-persist="project" checked disabled /> Apply auto position match</label>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3 class="panel-title">6. Crop (stabilization trim) <span class="help" tabindex="0" data-tip="Trims the uneven edges left by rotating and shifting. Fill extends them instead.">?</span></h3>
+      <div class="radio-group">
+        <label><input type="radio" name="emptyPixelMode" id="emptyPixelModeCrop" value="crop" checked /> Crop (remove edges)</label>
+        <label><input type="radio" name="emptyPixelMode" id="emptyPixelModeFill" value="fill" /> Fill (extend edges)</label>
+      </div>
+      <button id="suggestCropBtn" class="btn-secondary">Auto-Suggest Crop</button>
+      <div class="crop-grid">
+        <div></div>
+        <div class="crop-field"><label for="cropTop">Top</label><input type="number" id="cropTop" data-persist="project" min="0" value="0" /></div>
+        <div></div>
+        <div class="crop-field"><label for="cropLeft">Left</label><input type="number" id="cropLeft" data-persist="project" min="0" value="0" /></div>
+        <div class="crop-field"><label><input type="checkbox" id="showCropGuide" checked /> guide</label></div>
+        <div class="crop-field"><label for="cropRight">Right</label><input type="number" id="cropRight" data-persist="project" min="0" value="0" /></div>
+        <div></div>
+        <div class="crop-field"><label for="cropBottom">Bottom</label><input type="number" id="cropBottom" data-persist="project" min="0" value="0" /></div>
+        <div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3 class="panel-title">7. Export</h3>
+      <div class="control-group">
+        <label for="exportFormat">Format</label>
+        <select id="exportFormat">
+          <option value="image/png">PNG</option>
+          <option value="image/jpeg">JPEG</option>
+        </select>
+      </div>
+      <div class="button-group">
+        <button id="downloadAllZipBtn" class="btn-primary" disabled>Download all (ZIP)</button>
+        <button id="downloadOneBtn" class="btn-secondary btn-small" disabled>Selected card only</button>
+      </div>
+      <p class="status" id="exportStatus"></p>
+      <div id="sendSlot"></div>
+    </section>
+
+  </aside>
+
+  <main class="main">
+    <section class="preview-section">
+      <h3 class="preview-title">Preview: <span id="previewName" class="input-hint">— select a card —</span></h3>
+      <div class="progress" id="progress" hidden role="status" aria-live="polite">
+        <div class="progress-track"><div class="progress-bar"></div></div>
+        <span class="progress-label"></span>
+      </div>
+      <div class="comparison-container cols-3">
+        <div class="comparison-item">
+          <div class="comparison-label">Reference <span class="input-hint">(target)</span></div>
+          <div class="preview-canvas-container"><canvas id="referenceCanvas"></canvas></div>
+        </div>
+        <div class="comparison-item">
+          <div class="comparison-label">Before</div>
+          <div class="preview-canvas-container"><canvas id="beforeCanvas"></canvas></div>
+        </div>
+        <div class="comparison-item">
+          <div class="comparison-label">After</div>
+          <div class="preview-canvas-container"><canvas id="afterCanvas"></canvas></div>
+        </div>
+      </div>
+      <div class="comparison-container cols-1" id="guideRow">
+        <div class="comparison-item">
+          <div class="comparison-label">Rotation &amp; Crop Guide <span class="input-hint">(drag the dashed edges to crop)</span></div>
+          <div class="preview-canvas-container"><canvas id="guideCanvas"></canvas></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="gallery-sidebar">
+    <h3 class="gallery-title">Cards <span id="cardCount" class="input-hint"></span></h3>
+    <div id="gallery" class="gallery"></div>
+  </aside>
+</div>
+
+</div>
+
+<script src="shared/pnp-shared.js"></script>
+<script src="js/geometry.js"></script>
+<script src="js/analyze.js"></script>
+<script src="js/offset.js"></script>
+<script src="js/color.js"></script>
+<script src="js/fill.js"></script>
+<script src="js/render.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
