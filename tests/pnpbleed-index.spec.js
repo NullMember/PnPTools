@@ -117,3 +117,56 @@ test('card outputs record the bleed they were given', async ({ page }) => {
   const note = await page.evaluate((bytes) => PnP.readPngText(new Blob([new Uint8Array(bytes)]), 'PnPTools:bleed'), [...fs.readFileSync(out.path)]);
   expect(parseFloat(note)).toBeCloseTo(2, 1); // the default 2 mm
 });
+
+test('a removed edge becomes bleed: mirror reflects the kept card by bleed + removed', async ({ page }) => {
+  // 100 × 100 px "card" of 10 px vertical stripes, coloured by column; a 1 px white
+  // border on the left. Card size 100 × 100 mm makes 1 px = 1 mm.
+  const b64 = await page.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 100;
+    const g = c.getContext('2d');
+    for (let x = 0; x < 100; x++) { g.fillStyle = `rgb(${x * 2}, 50, 100)`; g.fillRect(x, 0, 1, 100); }
+    g.fillStyle = '#fff'; g.fillRect(0, 0, 1, 100);
+    const bytes = new Uint8Array(await (await PnP.canvasToBlob(c)).arrayBuffer());
+    let s = '';
+    bytes.forEach((b) => { s += String.fromCharCode(b); });
+    return btoa(s);
+  });
+  await page.fill('#cardWidthInput__display', '100');
+  await page.fill('#cardHeightInput__display', '100');
+  await page.fill('#bleedInput__display', '2');
+  await page.selectOption('#bleedMode', 'mirror');
+  await page.check('#removeLeftSideInput');
+  await page.fill('#leftSideWidthInput__display', '1');
+  await page.setInputFiles('#imageInput', { name: 'Stripes.png', mimeType: 'image/png', buffer: Buffer.from(b64, 'base64') });
+  await expect(page.locator('#downloadBtn')).toBeEnabled();
+  const out = await download(page, () => page.click('#downloadBtn'));
+  const row = await page.evaluate(async (bytes) => {
+    const bmp = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }));
+    const c = document.createElement('canvas');
+    c.width = bmp.width; c.height = bmp.height;
+    const g = c.getContext('2d');
+    g.drawImage(bmp, 0, 0);
+    const d = g.getImageData(0, 50, bmp.width, 1).data;
+    const reds = [];
+    for (let x = 0; x < 6; x++) reds.push(d[x * 4]);
+    return { width: bmp.width, reds };
+  }, [...fs.readFileSync(out.path)]);
+  expect(row.width).toBe(104); // image + 2 × 2 px bleed; the trim line stays at the image edge
+  // Kept card starts at image column 1 (output x = 3). The 3 px to its left mirror
+  // columns 3, 2, 1: no white, nothing smeared.
+  expect(row.reds).toEqual([6, 4, 2, 2, 4, 6]);
+
+  // Extend: the kept card's first column carries on over the removed strip too.
+  await page.selectOption('#bleedMode', 'extend');
+  const extended = await download(page, () => page.click('#downloadBtn'));
+  const reds = await page.evaluate(async (bytes) => {
+    const bmp = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }));
+    const c = document.createElement('canvas');
+    c.width = bmp.width; c.height = bmp.height;
+    const g = c.getContext('2d');
+    g.drawImage(bmp, 0, 0);
+    return [0, 1, 2, 3, 4].map((x) => g.getImageData(x, 50, 1, 1).data[0]);
+  }, [...fs.readFileSync(extended.path)]);
+  expect(reds).toEqual([2, 2, 2, 2, 4]);
+});
