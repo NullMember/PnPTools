@@ -571,7 +571,7 @@ $('downloadPdf').addEventListener('click', async () => {
     btn.disabled = true;
     try {
         const bytes = await buildPdf(state.layout, exportInfo(), (msg) => setStatus(msg, 'processing'));
-        PnP.downloadBlob(new Blob([bytes], { type: 'application/pdf' }), PnP.outputName(pieceFiles(), 'layout.pdf'));
+        await PnP.exportPdf(new Blob([bytes], { type: 'application/pdf' }), $('exportFormat').value, PnP.outputName(pieceFiles(), 'layout.pdf'));
         reportLayout(readSettings());
     } catch (err) {
         console.error(err);

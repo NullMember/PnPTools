@@ -299,6 +299,9 @@ function updateInfoGrid() {
     elements.infoGrid.style.display = 'grid';
 }
 
+// PDF, PNG or JPEG (the Export panel's format).
+const $format = () => document.getElementById('exportFormat').value;
+
 // Card i with bleed as a PNG, stamped with its DPI (from the card size) and
 // the bleed added ("PnPTools:bleed", mm), so Layout finds the card inside it.
 async function cardBlob(i) {
@@ -318,7 +321,7 @@ elements.downloadBtn.addEventListener('click', async () => {
         updateStatus('No processed card to download', 'error');
         return;
     }
-    PnP.downloadBlob(await cardBlob(state.selectedIndex), pngName(img.file.name));
+    await PnP.exportImages([{ name: pngName(img.file.name), blob: await cardBlob(state.selectedIndex) }], $format(), pngName(img.file.name));
     updateStatus('Downloaded.', 'success');
 });
 
@@ -332,11 +335,10 @@ elements.downloadAllBtn.addEventListener('click', async () => {
         for (let i = 0; i < state.images.length; i++) {
             updateStatus(`Processing card ${i + 1} of ${state.images.length}...`, 'info');
             await new Promise((r) => setTimeout(r, 0)); // let the status paint
-            entries.push({ name: pngName(state.images[i].file.name), data: await cardBlob(i) });
+            entries.push({ name: pngName(state.images[i].file.name), blob: await cardBlob(i) });
             if (i !== state.selectedIndex) state.images[i].processed = null;
         }
-        const blob = await PnP.zip.create(entries);
-        PnP.downloadBlob(blob, PnP.outputName(state.images.map((img) => img.file), 'bleed.zip', 'cards-with-bleed.zip'));
+        await PnP.exportImages(entries, $format(), PnP.outputName(state.images.map((img) => img.file), 'bleed.zip', 'cards-with-bleed.zip'), { alwaysZip: true });
 
         elements.downloadAllBtn.disabled = false;
         updateStatus(`Downloaded ${state.images.length} card(s).`, 'success');

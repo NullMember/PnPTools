@@ -173,8 +173,16 @@
 
                 <div class="panel">
                     <div class="panel-title">Export</div>
+                    <div class="control-group">
+                        <label for="exportFormat">Format</label>
+                        <select id="exportFormat">
+                            <option value="pdf">PDF</option>
+                            <option value="png">PNG (a page per image)</option>
+                            <option value="jpeg">JPEG (a page per image)</option>
+                        </select>
+                    </div>
                     <div class="button-group">
-                        <button class="btn-primary" id="downloadPdf" disabled>Download PDF</button>
+                        <button class="btn-primary" id="downloadPdf" disabled>Download</button>
                         <button class="btn-secondary" id="downloadSvg" disabled>Download SVG cut file</button>
                     </div>
                     <div class="input-hint">The SVG cut file matches the PDF.</div>

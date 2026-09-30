@@ -562,7 +562,7 @@ $('downloadPdf').addEventListener('click', async () => {
     btn.disabled = true;
     try {
         const bytes = await buildPdf(state.pages, paperSize(), resolvedArt(), readOptions(), (m) => setStatus(m, 'processing'));
-        PnP.downloadBlob(new Blob([bytes], { type: 'application/pdf' }), `${outputBase()}.pdf`);
+        await PnP.exportPdf(new Blob([bytes], { type: 'application/pdf' }), $('exportFormat').value, `${outputBase()}.pdf`);
         setStatus('');
     } catch (err) {
         console.error(err);

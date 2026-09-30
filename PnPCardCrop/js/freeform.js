@@ -238,8 +238,7 @@
     btn.disabled = true;
     try {
       const items = await exportItems();
-      const zip = await PnP.zip.create(items.map((it) => ({ name: it.name, data: it.blob })));
-      PnP.downloadBlob(zip, PnP.outputName(state.files, 'crops.zip', 'freeform-crops.zip'));
+      await PnP.exportImages(items, $('exportFormat').value, PnP.outputName(state.files, 'crops.zip', 'freeform-crops.zip'), { alwaysZip: true });
       setStatus(`Exported ${items.length} piece${items.length === 1 ? '' : 's'}.`, 'success');
     } catch (err) {
       console.error(err);

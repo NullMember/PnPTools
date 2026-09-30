@@ -406,6 +406,169 @@
         return new Blob([bytes.subarray(0, 2), app0, bytes.subarray(2)], { type: 'image/jpeg' });
     }
 
+    // ---------------------------------------------------------------- export formats
+
+    // Tools that make images or printable sheets export PDF, PNG or JPEG
+    // (format: 'pdf' | 'png' | 'jpeg'). Card images become one PDF page each,
+    // at their physical size; PDF sheets become one image per page.
+    const EXPORT_TYPES = { png: 'image/png', jpeg: 'image/jpeg' };
+    const EXPORT_EXT = { png: 'png', jpeg: 'jpg', pdf: 'pdf' };
+    const EXPORT_DPI = 300;
+
+    const withExt = (name, format) => `${baseName(name)}.${EXPORT_EXT[format]}`;
+
+    async function decodeImage(blob) {
+        return createImageBitmap(blob);
+    }
+
+    // An image in another format; JPEG gets a white background (it has no
+    // transparency). The DPI, when given, is recorded. An image already in
+    // that format is returned as it is, notes and all.
+    async function convertImage(blob, format, dpi = null) {
+        const type = EXPORT_TYPES[format];
+        if (blob.type === type) return blob;
+        const bmp = await decodeImage(blob);
+        const c = document.createElement('canvas');
+        c.width = bmp.width;
+        c.height = bmp.height;
+        const g = c.getContext('2d');
+        if (format === 'jpeg') {
+            g.fillStyle = '#fff';
+            g.fillRect(0, 0, c.width, c.height);
+        }
+        g.drawImage(bmp, 0, 0);
+        let out = await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode image.'))), type, 0.92));
+        if (dpi) out = await setImageDpi(out, dpi);
+        return out;
+    }
+
+    // An image's printed size in mm: its recorded size (plus bleed), else its
+    // DPI, else 300 DPI.
+    async function printedSizeMm(blob, w, h) {
+        const notes = await readSizeNotes(blob);
+        if (notes.widthMm && notes.heightMm) {
+            const b = notes.bleedMm || 0;
+            return { w: notes.widthMm + 2 * b, h: notes.heightMm + 2 * b };
+        }
+        const dpi = (await readImageDpi(blob)) || EXPORT_DPI;
+        return { w: (w / dpi) * 25.4, h: (h / dpi) * 25.4 };
+    }
+
+    // A PDF with one image per page, each page the image's printed size.
+    // Images are embedded as JPEG (no library needed).
+    async function imagesToPdf(items) {
+        const enc = new TextEncoder();
+        const parts = [];
+        const offsets = [];
+        let length = 0;
+        const add = (chunk) => { const bytes = typeof chunk === 'string' ? enc.encode(chunk) : chunk; parts.push(bytes); length += bytes.length; };
+        const obj = (n, body) => { offsets[n] = length; add(`${n} 0 obj\n`); body(); add('\nendobj\n'); };
+        const pt = (mm) => +((mm / 25.4) * 72).toFixed(3);
+
+        add('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+        const pages = [];
+        for (const it of items) {
+            const bmp = await decodeImage(it.blob);
+            const size = await printedSizeMm(it.blob, bmp.width, bmp.height);
+            const jpeg = new Uint8Array(await (await convertImage(it.blob, 'jpeg')).arrayBuffer());
+            pages.push({ w: pt(size.w), h: pt(size.h), px: [bmp.width, bmp.height], jpeg });
+        }
+        const n = pages.length;
+        // Objects: 1 catalog, 2 pages, then per page: page, content, image.
+        obj(1, () => add('<< /Type /Catalog /Pages 2 0 R >>'));
+        obj(2, () => add(`<< /Type /Pages /Count ${n} /Kids [${pages.map((_, i) => `${3 + i * 3} 0 R`).join(' ')}] >>`));
+        pages.forEach((p, i) => {
+            const page = 3 + i * 3, content = page + 1, image = page + 2;
+            obj(page, () => add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${p.w} ${p.h}] /Resources << /XObject << /Im0 ${image} 0 R >> >> /Contents ${content} 0 R >>`));
+            const draw = `q ${p.w} 0 0 ${p.h} 0 0 cm /Im0 Do Q`;
+            obj(content, () => { add(`<< /Length ${draw.length} >>\nstream\n`); add(draw); add('\nendstream'); });
+            obj(image, () => {
+                add(`<< /Type /XObject /Subtype /Image /Width ${p.px[0]} /Height ${p.px[1]} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.jpeg.length} >>\nstream\n`);
+                add(p.jpeg);
+                add('\nendstream');
+            });
+        });
+        const count = 3 + n * 3;
+        const xref = length;
+        add(`xref\n0 ${count}\n0000000000 65535 f \n`);
+        for (let i = 1; i < count; i++) add(`${String(offsets[i]).padStart(10, '0')} 00000 n \n`);
+        add(`trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+        return new Blob(parts, { type: 'application/pdf' });
+    }
+
+    // pdf.js, loaded the first time a PDF is turned into images.
+    const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+    let pdfjsLoading = null;
+    function loadPdfJs() {
+        if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+        if (!pdfjsLoading) {
+            pdfjsLoading = new Promise((resolve, reject) => {
+                const s = h('script', { src: `${PDFJS}pdf.min.js` });
+                s.onload = () => {
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS}pdf.worker.min.js`;
+                    resolve(window.pdfjsLib);
+                };
+                s.onerror = () => { pdfjsLoading = null; reject(new Error('Could not load the PDF renderer.')); };
+                document.head.append(s);
+            });
+        }
+        return pdfjsLoading;
+    }
+
+    // Each page of a PDF as a PNG or JPEG at `dpi`, with the DPI recorded.
+    async function pdfToImages(pdfBlob, { format = 'png', dpi = EXPORT_DPI, name = 'page' } = {}) {
+        const pdfjs = await loadPdfJs();
+        const pdf = await pdfjs.getDocument({ data: new Uint8Array(await pdfBlob.arrayBuffer()) }).promise;
+        const out = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const vp = page.getViewport({ scale: dpi / 72 });
+            const c = document.createElement('canvas');
+            c.width = Math.round(vp.width);
+            c.height = Math.round(vp.height);
+            const g = c.getContext('2d');
+            g.fillStyle = '#fff';
+            g.fillRect(0, 0, c.width, c.height);
+            await page.render({ canvasContext: g, viewport: vp }).promise;
+            let blob = await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('Could not encode image.'))), EXPORT_TYPES[format], 0.92));
+            blob = await setImageDpi(blob, dpi);
+            const suffix = pdf.numPages > 1 ? `-${String(i).padStart(2, '0')}` : '';
+            out.push({ name: `${baseName(name)}${suffix}.${EXPORT_EXT[format]}`, blob });
+            c.width = 0;
+        }
+        return out;
+    }
+
+    // Download images ([{ name, blob }]) as PDF (one file), or as PNG or
+    // JPEG (one file, or a zip of several; alwaysZip: a zip even for one).
+    // name: the PDF's or zip's name (its extension is replaced).
+    async function exportImages(items, format, name, { alwaysZip = false } = {}) {
+        if (!items.length) return;
+        if (format === 'pdf') {
+            downloadBlob(await imagesToPdf(items), `${baseName(name)}.pdf`);
+            return;
+        }
+        const files = [];
+        for (const it of items) {
+            const dpi = await readImageDpi(it.blob);
+            files.push({ name: withExt(it.name, format), data: await convertImage(it.blob, format, dpi) });
+        }
+        if (files.length === 1 && !alwaysZip) downloadBlob(files[0].data, files[0].name);
+        else downloadBlob(await zip.create(files), `${baseName(name)}.zip`);
+    }
+
+    // Download a PDF of printable sheets as the chosen format: the PDF, or
+    // its pages as PNG or JPEG images (one file, or a zip of several).
+    async function exportPdf(pdfBlob, format, name) {
+        if (format === 'pdf') {
+            downloadBlob(pdfBlob, `${baseName(name)}.pdf`);
+            return;
+        }
+        const pages = await pdfToImages(pdfBlob, { format, name });
+        if (pages.length === 1) downloadBlob(pages[0].blob, pages[0].name);
+        else downloadBlob(await zip.create(pages.map((p) => ({ name: p.name, data: p.blob }))), `${baseName(name)}.zip`);
+    }
+
     // ---------------------------------------------------------------- presets
 
     const presets = {
@@ -2615,6 +2778,11 @@ ${content(([x, y]) => [x - m, y - m])}
         readPngText,
         readSizeNotes,
         setSizeNote,
+        exportImages,
+        exportPdf,
+        imagesToPdf,
+        pdfToImages,
+        convertImage,
         canvasToBlob: (canvas, type = 'image/png', quality) => new Promise((resolve, reject) => {
             canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode image.'))), type, quality);
         }),

@@ -70,8 +70,16 @@
             <input type="number" id="cropMargin" data-unit="mm" value="0" min="0" max="10" step="0.25">
             <div class="input-hint">Keeps a little of the scan beyond each outline.</div>
           </div>
+          <div class="control-group">
+            <label for="exportFormat">Format</label>
+            <select id="exportFormat">
+              <option value="pdf">PDF</option>
+              <option value="png" selected>PNG</option>
+              <option value="jpeg">JPEG</option>
+            </select>
+          </div>
           <div class="button-group">
-            <button type="button" class="btn-primary" id="downloadBtn" disabled>Download PNGs (ZIP)</button>
+            <button type="button" class="btn-primary" id="downloadBtn" disabled>Download</button>
           </div>
           <div id="sendSlot"></div>
           <div class="status" id="status" hidden></div>

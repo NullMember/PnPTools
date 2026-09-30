@@ -104,5 +104,5 @@ async function buildPDF() {
   }
 
   const kind = cfg.mode === 'saddle' ? 'booklet.pdf' : 'sheets.pdf';
-  PnP.downloadBlob(pdf.output('blob'), PnP.outputName(state.sourceFiles, kind));
+  await PnP.exportPdf(pdf.output('blob'), document.getElementById('exportFormat').value, PnP.outputName(state.sourceFiles, kind));
 }

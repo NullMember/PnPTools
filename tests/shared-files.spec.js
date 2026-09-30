@@ -190,8 +190,7 @@ test('downloads are recorded; zips are unpacked for preview', async ({ page }) =
 
 test('PDF outputs open in the viewer; project saves are not recorded', async ({ page }) => {
   await page.goto('PnPTuckBox/index.html');
-  const pdfButton = page.getByRole('button', { name: /PDF/ }).first();
-  await download(page, () => pdfButton.click());
+  await download(page, () => page.click('#downloadPdf'));
   await download(page, () => topBar(page).getByRole('button', { name: 'Save', exact: true }).click());
   await openFiles(page);
   await expect(batches(page)).toHaveCount(1);

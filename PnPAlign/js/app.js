@@ -741,8 +741,13 @@
     return card.dpi ? card.dpi * scale : null;
   }
 
+  // A PDF is made of PNG cards; images use the format chosen.
+  const PDF = 'application/pdf';
+  const imageFormat = (format) => (format === PDF ? 'image/png' : format);
+
   // One aligned card at full resolution, stamped with its DPI.
   async function alignedBlob(card, format) {
+    format = imageFormat(format);
     const options = currentOptions();
     const canvas = Render.renderCard(card, options, null); // null = full resolution
     const blob = await PnP.canvasToBlob(canvas, format, 0.95);
@@ -766,7 +771,9 @@
     const card = getSelected();
     if (!card) return;
     const format = el('exportFormat').value;
-    PnP.downloadBlob(await alignedBlob(card, format), alignedName(card, format));
+    const file = { name: alignedName(card, format), blob: await alignedBlob(card, format) };
+    if (format === PDF) await PnP.exportImages([file], 'pdf', file.name);
+    else PnP.downloadBlob(file.blob, file.name);
   });
 
   el('downloadAllZipBtn').addEventListener('click', async () => {
@@ -781,10 +788,15 @@
       const name = uniqueZipName(alignedName(card, format), used);
       files.push({ name, data: await alignedBlob(card, format) });
     }
-    exportStatus.textContent = `Building ZIP archive...`;
-    const zipBlob = await PnP.zip.create(files);
-    PnP.downloadBlob(zipBlob, PnP.outputName(state.cards, 'aligned.zip', 'aligned_cards.zip'));
-    exportStatus.textContent = `Done — zipped ${state.cards.length} card(s).`;
+    const outName = PnP.outputName(state.cards, 'aligned.zip', 'aligned_cards.zip');
+    if (format === PDF) {
+      exportStatus.textContent = 'Building PDF...';
+      await PnP.exportImages(files.map((f) => ({ name: f.name, blob: f.data })), 'pdf', outName);
+    } else {
+      exportStatus.textContent = 'Building ZIP archive...';
+      PnP.downloadBlob(await PnP.zip.create(files), outName);
+    }
+    exportStatus.textContent = `Done: ${state.cards.length} card(s).`;
     btn.disabled = false;
   });
 

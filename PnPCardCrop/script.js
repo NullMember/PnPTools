@@ -439,7 +439,16 @@ const OUTPUT_FORMATS = {
     png: { type: 'image/png', ext: 'png' },
     jpeg: { type: 'image/jpeg', ext: 'jpg' },
     webp: { type: 'image/webp', ext: 'webp' },
+    pdf: { type: 'image/png', ext: 'png', pdf: true }, // PNG cards, collected into a PDF
 };
+
+// The cards of one side as a zip of images, or as a PDF with a page per card.
+async function packCards(zip, list, name, link) {
+    const pdf = OUTPUT_FORMATS[document.getElementById('outputFormat').value]?.pdf;
+    const blob = pdf ? await PnP.imagesToPdf(list) : await zip.generateAsync({ type: 'blob' });
+    setDownload(link, blob, pdf ? name.replace(/\.zip$/, '.pdf') : name);
+    link.textContent = link.textContent.replace(/\((ZIP|PDF)\)/, pdf ? '(PDF)' : '(ZIP)');
+}
 
 // Form submission for cropping the PDF
 // Cropping reads every page and card back for image encoding, so their
@@ -775,15 +784,12 @@ cropForm.addEventListener('submit', async (event) => {
 
     // Generate and download zip files
     if (isDuplex || isDuplexShort || isFoldVertical || isFoldHorizontal || isBackLast) {
-        const frontBytes = await frontZip.generateAsync({ type: 'blob' });
-        const backBytes = await backZip.generateAsync({ type: 'blob' });
-
         const frontLink = document.getElementById('downloadFrontLink');
-        setDownload(frontLink, frontBytes, 'front_cards.zip');
+        await packCards(frontZip, lastCrop.front, 'front_cards.zip', frontLink);
         frontLink.classList.add('show');
 
         const backLink = document.getElementById('downloadBackLink');
-        setDownload(backLink, backBytes, 'back_cards.zip');
+        await packCards(backZip, lastCrop.back, 'back_cards.zip', backLink);
         backLink.classList.add('show');
 
         pdfStatus.textContent = '✓ Done! Click the links to download your files.';
@@ -791,10 +797,8 @@ cropForm.addEventListener('submit', async (event) => {
         pdfStatus.classList.add('success');
     }
     else {
-        const outputBytes = await frontZip.generateAsync({ type: 'blob' });
-
         const link = document.getElementById('downloadLink');
-        setDownload(link, outputBytes, 'cards.zip');
+        await packCards(frontZip, lastCrop.front, 'cards.zip', link);
         link.classList.add('show');
 
         pdfStatus.textContent = '✓ Done! Click the link to download your file.';
